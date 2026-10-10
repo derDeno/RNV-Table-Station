@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: firmware-release-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event.pull_request.head.ref == 'dev'
+    runs-on: ubuntu-latest
+    env:
+      RNV_CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: test -n "$RNV_CLIENT_SECRET"
+        name: Require API client secret
+      - run: python -m pip install platformio
+      - run: pio run
+      - run: pio run -t buildfs
+      - name: Name firmware images by version
+        run: |
+          mkdir -p artifacts
+          firmware_version=$(sed -nE 's/.*firmwareVersion\[\] = "([^"]+)";.*/\1/p' src/main.cpp)
+          filesystem_version=$(tr -d '\r\n' < data/version.txt)
+          cp .pio/build/esp32-c6-devkitc-1/firmware.factory.bin "artifacts/full-${firmware_version}.bin"
+          cp .pio/build/esp32-c6-devkitc-1/firmware.bin "artifacts/ota-${firmware_version}.bin"
+          cp .pio/build/esp32-c6-devkitc-1/littlefs.bin "artifacts/filesystem-${filesystem_version}.bin"
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          firmware_version=$(sed -nE 's/.*firmwareVersion\[\] = "([^"]+)";.*/\1/p' src/main.cpp)
+          tag="v${firmware_version}"
+          title="RNV Table Station ${tag}"
+          notes="Built from PR #${PR_NUMBER} at commit ${PR_HEAD_SHA}."
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            if [[ "$(gh release view "$tag" --json isDraft --jq .isDraft)" != true ]]; then
+              echo "Release $tag already exists and is published; refusing to change it." >&2
+              exit 1
+            fi
+            gh release edit "$tag" --draft --title "$title" --notes "$notes" --target "$PR_HEAD_SHA"
+            gh release view "$tag" --json assets --jq '.assets[].name' |
+              while IFS= read -r asset; do
+                if [[ "$asset" == filesystem-*.bin ]]; then
+                  gh release delete-asset "$tag" "$asset" --yes
+                fi
+              done
+            gh release upload "$tag" artifacts/*.bin --clobber
+          else
+            gh release create "$tag" artifacts/*.bin --draft --title "$title" --notes "$notes" --target "$PR_HEAD_SHA"
+          fi
