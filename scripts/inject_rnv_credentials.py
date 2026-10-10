@@ -4,6 +4,16 @@ import json
 from pathlib import Path
 
 
+toolchain = Path(env.PioPlatform().get_package_dir("toolchain-riscv32-esp") or "")
+if not (toolchain / "bin").is_dir():
+    from platformio.project.config import ProjectConfig
+
+    core_dir = ProjectConfig.get_instance().get("platformio", "core_dir")
+    toolchain = Path(core_dir) / "tools" / "toolchain-riscv32-esp"
+if (toolchain / "bin").is_dir():
+    env.PrependENVPath("PATH", str(toolchain / "bin"))
+
+
 project_dir = Path(env.subst("$PROJECT_DIR"))
 build_dir = Path(env.subst("$BUILD_DIR"))
 if not build_dir.is_absolute():

@@ -65,6 +65,10 @@ The firmware reads these values during a PlatformIO build to fetch live departur
 
 The preview requests `/api/departures?slot=0`, `1`, or `2` from the device and refreshes the selected screen every 20 seconds. The device needs internet access and a valid system clock for the RNV API request.
 
+For WebUI development without device setup, add `?debug=1` before the page fragment (for example, `index.html?debug=1#home`). This bypasses setup gating while keeping API requests enabled when available.
+
+Build a filesystem image with PlatformIO's `buildfs` target and upload the generated `.bin` in the separate Dateisystem-Update field. Settings are stored in NVS, so normal firmware and filesystem updates preserve them. A full flash erase still clears NVS.
+
 In the assets Folder are the api Schema and documentation.
 
 
