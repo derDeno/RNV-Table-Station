@@ -53,12 +53,17 @@ RNV has an api from where we can load all data we Need.
 They use opendata as a Plattform.
 
 This are our test creds:
-
 clientID=x
 tenantID=x
 clientSecret=x
 resource=x
 hostname=https://graphql-sandbox-dds.rnv-online.de
+
+the unredacetd values are in the .env file
+
+The firmware reads these values during a PlatformIO build to fetch live departures for the display preview. It generates a private header under `.pio/`; credentials are not sent to the browser or committed to the repository. The client secret is still embedded in the firmware binary, so keep builds made with shared credentials private.
+
+The preview requests `/api/departures?slot=0`, `1`, or `2` from the device and refreshes the selected screen every 20 seconds. The device needs internet access and a valid system clock for the RNV API request.
 
 In the assets Folder are the api Schema and documentation.
 

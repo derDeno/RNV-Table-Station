@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>RNV-Haltestellenanzeige</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <style>
+    :root {
+      font: 16px/1.45 system-ui, sans-serif;
+      color: #172b3b;
+      background: #f2f5f7;
+      --orange: #ee7202;
+      --blue: #00254c;
+      --muted: #667784;
+      --line: #dce3e8;
+    }
+    * { box-sizing: border-box; }
+    body { display: flex; flex-direction: column; min-height: 100vh; margin: 0; min-width: 320px; }
+    .topbar { background: var(--orange); color: white; box-shadow: 0 2px 10px #00254c25; }
+    .topbar-inner { max-width: 1120px; min-height: 68px; margin: auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-size: 1.05rem; font-weight: 750; letter-spacing: .01em; }
+    nav { display: flex; align-self: stretch; gap: 8px; }
+    .nav-link { position: relative; display: grid; place-items: center; padding: 0 14px; border: 0; background: transparent; color: #fff1e5; font: inherit; font-weight: 650; cursor: pointer; }
+    .nav-link[aria-current="page"] { color: white; }
+    .nav-link[aria-current="page"]::after { position: absolute; right: 12px; bottom: 0; left: 12px; height: 3px; border-radius: 3px 3px 0 0; background: white; content: ""; }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #ffad63; outline-offset: 2px; }
+    main { width: 100%; max-width: 1120px; flex: 1; margin: 0 auto; padding: 34px 24px 56px; }
+    h1 { margin: 0 0 22px; color: var(--blue); font-size: clamp(1.65rem, 4vw, 2rem); line-height: 1.2; }
+    h2 { margin: 0; color: var(--blue); font-size: 1.12rem; }
+    .home-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .85fr); gap: 20px; align-items: stretch; }
+    .card { min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: 0 5px 20px #00254c0b; }
+    .card-header { display: flex; align-items: center; gap: 10px; min-height: 62px; padding: 15px 20px; border-bottom: 1px solid var(--line); }
+    summary.card-header { justify-content: space-between; cursor: pointer; list-style: none; }
+    summary.card-header::-webkit-details-marker { display: none; }
+    summary.card-header::after { color: var(--orange); content: "+"; font-size: 1.5rem; line-height: 1; }
+    details[open] > summary.card-header::after { content: "−"; }
+    .info-groups { padding: 16px 20px 18px; }
+    .info-group + .info-group { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .info-group h3 { margin: 0; color: var(--muted); font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; }
+    .info-list { margin: 0; }
+    .info-row { display: grid; grid-template-columns: minmax(125px, .7fr) minmax(0, 1.3fr); gap: 14px; padding: 14px 0; border-bottom: 1px solid #edf0f2; }
+    .info-row:last-child { border-bottom: 0; }
+    dt { color: var(--muted); }
+    dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-weight: 650; }
+    .status-value { display: inline-flex; align-items: center; gap: 7px; }
+    .status-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: #9aa7b0; }
+    .status-dot.online { background: #198754; }
+    .preview-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 376px; padding: 18px; background: linear-gradient(145deg, #f8fafb, #eef2f5); border-radius: 0 0 14px 14px; }
+    .device { width: 342px; max-width: 100%; padding: 11px; border: 1px solid #c8d0d6; border-radius: 21px; background: #253440; box-shadow: 0 12px 26px #142c3b26; }
+    .display { width: 100%; aspect-ratio: 320 / 172; padding: 10px; border-radius: 12px; background: white; color: #162d40; }
+    .display-brand { display: flex; align-items: center; justify-content: space-between; padding-bottom: 6px; border-bottom: 2px solid var(--orange); color: var(--blue); font-weight: 800; }
+    .display-brand span:last-child { color: var(--orange); font-size: .68rem; font-weight: 750; }
+    .station-name { min-height: 0; margin: 5px 0; overflow: hidden; color: var(--blue); font-size: .72rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+    .departures { width: 100%; border-collapse: collapse; font-size: .7rem; }
+    .departures th { padding: 4px; background: var(--blue); color: white; text-align: left; }
+    .departures th:last-child, .departures td:last-child { text-align: right; }
+    .departures td { padding: 5px 4px; border-bottom: 1px solid #e5e9ec; font-weight: 700; }
+    .display-note { margin: 5px 0 0; color: var(--muted); font-size: .62rem; text-align: center; }
+    .screen-buttons { display: flex; gap: 10px; }
+    .screen-button { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid #c4cfd6; border-radius: 50%; background: white; color: var(--blue); font: inherit; font-weight: 750; cursor: pointer; }
+    .screen-button[aria-pressed="true"] { border-color: var(--orange); background: var(--orange); color: white; }
+    .screen-button:focus-visible { outline: 3px solid #ffad63; outline-offset: 2px; }
+    .settings-stack { display: grid; gap: 18px; }
+    .settings-body { padding: 18px 20px 20px; }
+    .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
+    label { display: block; margin: 0 0 6px; font-weight: 650; }
+    input, select { width: 100%; min-height: 44px; border: 1px solid #bdc9d1; border-radius: 7px; padding: 9px 11px; background: white; color: inherit; font: inherit; }
+    input[readonly] { background: #f8fafb; }
+    input[type="range"] { min-height: 32px; padding: 0; accent-color: var(--orange); }
+    input[type="file"] { padding: 6px; }
+    .help { margin: 6px 0 0; color: var(--muted); font-size: .86rem; }
+    .slot-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .slot-list .help { grid-column: 1 / -1; }
+    .station-input { display: flex; gap: 8px; }
+    .station-input input { min-width: 0; }
+    .picker-button { width: 44px; min-width: 44px; min-height: 44px; border: 1px solid #bdc9d1; border-radius: 7px; background: white; color: var(--orange); font: inherit; font-size: 1.4rem; font-weight: 700; cursor: pointer; }
+    #stationDialog { width: min(1040px, calc(100% - 32px)); max-width: none; max-height: calc(100vh - 32px); overflow: auto; }
+    .station-search { position: relative; margin-bottom: 12px; }
+    .station-results { position: absolute; z-index: 1000; top: calc(100% + 4px); right: 0; left: 0; max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: white; box-shadow: 0 8px 24px #00254c24; }
+    .station-result { display: block; width: 100%; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--line); background: white; color: var(--blue); font: inherit; text-align: left; cursor: pointer; }
+    .station-result:last-child { border-bottom: 0; }
+    .station-result:hover, .station-result:focus-visible { background: #fff0e3; }
+    .station-results .help { padding: 10px 12px; }
+    #stationMap { height: min(58vh, 520px); min-height: 300px; border-radius: 10px; background: #e8edf1; }
+    .station-map-status { margin: 8px 0; color: #981c1c; font-size: .9rem; }
+    .station-map-note { margin: 8px 0 16px; color: var(--muted); font-size: .82rem; }
+    .stop-popup { display: grid; gap: 8px; }
+    .settings-secondary { margin-top: 18px; }
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .settings-actions { grid-column: 1 / -1; }
+    .primary-button { min-height: 44px; border: 0; border-radius: 7px; padding: 10px 17px; background: var(--orange); color: white; font: inherit; font-weight: 750; cursor: pointer; }
+    .primary-button:hover { background: #d96500; }
+    .toggle-button { min-height: 44px; border: 1px solid #bdc9d1; border-radius: 7px; padding: 9px 12px; background: white; color: var(--blue); font: inherit; font-weight: 650; cursor: pointer; }
+    .toggle-button[aria-pressed="true"] { border-color: var(--orange); background: #fff0e3; }
+    .danger-button { min-height: 44px; border: 0; border-radius: 7px; padding: 10px 17px; background: #bd2525; color: white; font: inherit; font-weight: 750; cursor: pointer; }
+    .danger-button:hover { background: #981c1c; }
+    .reset-warning { margin: 0 0 16px; color: #981c1c; font-weight: 650; }
+    dialog { width: min(440px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 14px; padding: 24px; color: inherit; box-shadow: 0 18px 60px #00254c40; }
+    dialog::backdrop { background: #10283b80; }
+    dialog h2 { margin-bottom: 12px; }
+    .site-footer { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: auto; padding: 18px 24px 24px; color: var(--muted); font-size: .9rem; }
+    .github-link { display: inline-flex; align-items: center; gap: 7px; color: var(--blue); font-weight: 650; text-decoration: none; }
+    .github-link:hover { text-decoration: underline; }
+    .github-link svg { width: 19px; height: 19px; fill: currentColor; }
+    [hidden] { display: none !important; }
+    @media (max-width: 700px) {
+      .topbar-inner { min-height: 60px; padding: 0 14px; gap: 10px; }
+      .brand { font-size: .94rem; }
+      .nav-link { padding: 0 9px; font-size: .9rem; }
+      main { padding: 26px 14px 40px; }
+      .home-grid { grid-template-columns: 1fr; }
+      .preview-wrap { min-height: 360px; }
+      .field-grid { grid-template-columns: 1fr; }
+      .slot-list { grid-template-columns: 1fr; }
+      #stationDialog { width: calc(100% - 20px); max-height: calc(100vh - 20px); padding: 18px; }
+      #stationMap { height: 52vh; min-height: 260px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span>RNV-Haltestellenanzeige</span></div>
+      <nav aria-label="Hauptnavigation">
+        <button class="nav-link" type="button" data-view="home" aria-current="page">Übersicht</button>
+        <button class="nav-link" type="button" data-view="settings">Einstellungen</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section id="homeView" class="page" aria-labelledby="homeTitle">
+      <h1 id="homeTitle">Übersicht</h1>
+      <div class="home-grid">
+        <article class="card">
+          <div class="card-header"><h2>Geräteinformationen</h2></div>
+          <div class="info-groups">
+            <section class="info-group" aria-labelledby="deviceInfoTitle">
+              <h3 id="deviceInfoTitle">Gerät</h3>
+              <dl class="info-list">
+                <div class="info-row"><dt>Firmware</dt><dd id="firmwareVersion">Wird geladen</dd></div>
+                <div class="info-row"><dt>API-Verbindung</dt><dd class="status-value"><span id="apiDot" class="status-dot" aria-hidden="true"></span><span id="apiStatus">Wird geprüft</span></dd></div>
+                <div class="info-row"><dt>Betriebszeit</dt><dd id="uptime">Wird geladen</dd></div>
+              </dl>
+            </section>
+            <section class="info-group" aria-labelledby="networkInfoTitle">
+              <h3 id="networkInfoTitle">Netzwerk</h3>
+              <dl class="info-list">
+                <div class="info-row"><dt>WLAN</dt><dd id="wifiDetails">Wird geladen</dd></div>
+                <div class="info-row"><dt>Signalstärke</dt><dd id="wifiSignal">Wird geladen</dd></div>
+                <div class="info-row"><dt>IP-Adresse</dt><dd id="wifiIp">Wird geladen</dd></div>
+                <div class="info-row"><dt>MAC-Adresse</dt><dd id="macAddress">Wird geladen</dd></div>
+              </dl>
+            </section>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header"><h2>Display-Vorschau</h2></div>
+          <div class="preview-wrap">
+            <div class="device" aria-label="Vorschau des Haltestellen-Displays">
+              <div class="display">
+                <div class="display-brand"><span>rnv</span><span>ABFAHRT</span></div>
+                <div id="previewStation" class="station-name">Haltestelle nicht konfiguriert</div>
+                <table class="departures">
+                  <thead><tr><th>Linie</th><th>Abfahrt</th></tr></thead>
+                  <tbody id="previewDepartures"><tr><td>—</td><td>—</td></tr><tr><td>—</td><td>—</td></tr></tbody>
+                </table>
+                <p id="previewNote" class="display-note">Warte auf Fahrplandaten</p>
+              </div>
+            </div>
+            <div class="screen-buttons" role="group" aria-label="Bildschirm auswählen">
+              <button class="screen-button" type="button" data-preview-slot="0" aria-label="Bildschirm 1" aria-pressed="true">1</button>
+              <button class="screen-button" type="button" data-preview-slot="1" aria-label="Bildschirm 2" aria-pressed="false">2</button>
+              <button class="screen-button" type="button" data-preview-slot="2" aria-label="Bildschirm 3" aria-pressed="false">3</button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="settingsView" class="page" aria-labelledby="settingsTitle" hidden>
+      <h1 id="settingsTitle">Einstellungen</h1>
+      <div class="settings-stack">
+        <details class="card">
+          <summary class="card-header"><h2>WLAN</h2></summary>
+          <form id="wifi-form" class="settings-body field-grid">
+            <div><label for="wifiSsid">Netzwerkname</label><input id="wifiSsid" autocomplete="username" required maxlength="32"></div>
+            <div><label for="wifiPassword">WLAN-Passwort</label><input id="wifiPassword" type="password" autocomplete="new-password" maxlength="63" placeholder="Bei offenem WLAN leer lassen, sonst Passwort eingeben"></div>
+            <div class="actions settings-actions"><button class="primary-button" type="submit">WLAN speichern und neu starten</button><p id="wifiStatus" role="status" aria-live="polite"></p></div>
+          </form>
+        </details>
+        <details class="card">
+          <summary class="card-header"><h2>Geräteeinstellungen</h2></summary>
+          <form id="device-form" class="settings-body field-grid">
+            <div><label for="hostname">Gerätename (Hostname)</label><input id="hostname" pattern="[A-Za-z0-9][A-Za-z0-9-]{0,30}[A-Za-z0-9]|[A-Za-z0-9]" maxlength="32" required></div>
+            <div><label for="screenBrightness">Bildschirmhelligkeit <output id="brightnessValue" for="screenBrightness">100 %</output></label><input id="screenBrightness" type="range" min="1" max="100" value="100"></div>
+            <div><button id="screenFlip" class="toggle-button" type="button" aria-pressed="false">Bildschirm drehen</button></div>
+            <div class="actions settings-actions"><button class="primary-button" type="submit">Geräteeinstellungen speichern und neu starten</button><p id="deviceStatus" role="status" aria-live="polite"></p></div>
+          </form>
+        </details>
+        <details class="card">
+          <summary class="card-header"><h2>Haltestellen-Slots</h2></summary>
+          <form id="stations-form" class="settings-body slot-list">
+            <div><label for="stationName0">Slot 1</label><div class="station-input"><input id="stationName0" readonly placeholder="Haltestelle auswählen"><input id="station0" type="hidden"><button class="picker-button" type="button" data-station-picker="0" aria-label="Haltestelle für Slot 1 auswählen">+</button></div></div>
+            <div><label for="stationName1">Slot 2</label><div class="station-input"><input id="stationName1" readonly placeholder="Haltestelle auswählen"><input id="station1" type="hidden"><button class="picker-button" type="button" data-station-picker="1" aria-label="Haltestelle für Slot 2 auswählen">+</button></div></div>
+            <div><label for="stationName2">Slot 3</label><div class="station-input"><input id="stationName2" readonly placeholder="Haltestelle auswählen"><input id="station2" type="hidden"><button class="picker-button" type="button" data-station-picker="2" aria-label="Haltestelle für Slot 3 auswählen">+</button></div></div>
+            <div><label for="defaultSlot">Standardslot beim Start</label><select id="defaultSlot"><option value="0">Slot 1</option><option value="1">Slot 2</option><option value="2">Slot 3</option></select></div>
+            <p class="help">Die Haltestellensuche nutzt den RNV-Haltestellenkatalog. Für die Kartenansicht ist eine Internetverbindung erforderlich.</p>
+            <div class="actions settings-actions"><button class="primary-button" type="submit">Haltestellen speichern und neu starten</button><p id="stationsStatus" role="status" aria-live="polite"></p></div>
+          </form>
+        </details>
+      </div>
+      <details class="card settings-secondary">
+        <summary class="card-header"><h2>Einstellungen zurücksetzen</h2></summary>
+        <div class="settings-body">
+          <p class="reset-warning">Alle gespeicherten Einstellungen werden dauerhaft gelöscht. Dieser Vorgang kann nicht rückgängig gemacht werden.</p>
+          <div class="actions">
+            <button id="resetSettings" class="danger-button" type="button">Einstellungen zurücksetzen</button>
+            <p id="resetStatus" role="status" aria-live="polite"></p>
+          </div>
+        </div>
+      </details>
+      <details class="card settings-secondary">
+        <summary class="card-header"><h2>Firmware-Update</h2></summary>
+        <div class="settings-body">
+          <div class="field-grid">
+            <div><label for="firmware">Firmware-Datei auswählen</label><input id="firmware" type="file" accept=".bin,application/octet-stream"></div>
+            <div class="actions" style="align-self:end"><button id="update" class="primary-button" type="button">Update installieren</button><p id="otaStatus" role="status" aria-live="polite"></p></div>
+          </div>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a class="github-link" href="https://github.com/derDeno/RNV-Table-Station" target="_blank" rel="noopener noreferrer">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      Auf GitHub ansehen
+    </a>
+    <span>Firmware-Version: <span id="footerFirmwareVersion">Wird geladen</span></span>
+  </footer>
+
+  <dialog id="resetDialog" aria-labelledby="resetDialogTitle" aria-describedby="resetDialogDescription">
+    <form method="dialog">
+      <h2 id="resetDialogTitle">Einstellungen zurücksetzen?</h2>
+      <p id="resetDialogDescription" class="reset-warning">Alle gespeicherten Einstellungen werden dauerhaft gelöscht. Dieser Vorgang kann nicht rückgängig gemacht werden. Das Gerät startet anschließend neu.</p>
+      <div class="actions">
+        <button class="toggle-button" value="cancel">Abbrechen</button>
+        <button class="danger-button" value="reset">Einstellungen löschen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="stationDialog" aria-labelledby="stationDialogTitle">
+    <form method="dialog">
+      <h2 id="stationDialogTitle">Haltestelle auswählen</h2>
+      <div class="station-search">
+        <label for="stationSearch">Haltestelle suchen</label>
+        <input id="stationSearch" type="search" autocomplete="off" placeholder="Haltestellenname eingeben">
+        <div id="stationResults" class="station-results" hidden></div>
+      </div>
+      <p id="stationMapStatus" class="station-map-status" role="status" hidden></p>
+      <div id="stationMap" role="region" aria-label="Karte mit RNV-Haltestellen"></div>
+      <p class="station-map-note">Karte benötigt eine Internetverbindung. Haltestellendaten: © Rhein-Neckar-Verkehr GmbH (RNV).</p>
+      <div class="actions"><button class="toggle-button">Schließen</button></div>
+    </form>
+  </dialog>
+
+  <script src="stops.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    const pages = { home: document.querySelector('#homeView'), settings: document.querySelector('#settingsView') };
+    const wifiStatus = document.querySelector('#wifiStatus');
+    const deviceStatus = document.querySelector('#deviceStatus');
+    const stationsStatus = document.querySelector('#stationsStatus');
+    const otaStatus = document.querySelector('#otaStatus');
+    const resetStatus = document.querySelector('#resetStatus');
+    const resetDialog = document.querySelector('#resetDialog');
+    const stationDialog = document.querySelector('#stationDialog');
+    const stationSearch = document.querySelector('#stationSearch');
+    const stationResults = document.querySelector('#stationResults');
+    const stationCatalog = window.rnvStops || [];
+    const stationByHafasId = new Map(stationCatalog.map(station => [station.hafasId, station]));
+    const stationMarkers = new Map();
+    let stationMap;
+    let stationMapDefaultView;
+    let activeStationSlot = 0;
+    let activePreviewSlot = 0;
+    let previewRequestId = 0;
+    let configuredSlots = ['', '', ''];
+    function updateFlipButton() {
+      const flipped = document.querySelector('#screenFlip').getAttribute('aria-pressed') === 'true';
+      document.querySelector('#screenFlip').textContent = flipped ? 'Bildschirm zurückdrehen' : 'Bildschirm drehen';
+    }
+    document.querySelector('#screenFlip').addEventListener('click', event => {
+      event.currentTarget.setAttribute('aria-pressed', event.currentTarget.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+      updateFlipButton();
+    });
+    document.querySelector('#screenBrightness').addEventListener('input', event => {
+      document.querySelector('#brightnessValue').value = `${event.currentTarget.value} %`;
+    });
+    function renderPreview(slot) {
+      activePreviewSlot = slot;
+      const station = configuredSlots[slot];
+      document.querySelector('#previewStation').textContent = station ? `Haltestelle · ${station}` : `Bildschirm ${slot + 1} · nicht konfiguriert`;
+      document.querySelectorAll('[data-preview-slot]').forEach(button => {
+        button.setAttribute('aria-pressed', Number(button.dataset.previewSlot) === slot ? 'true' : 'false');
+      });
+      loadPreviewDepartures(slot);
+    }
+    async function loadPreviewDepartures(slot) {
+      const requestId = ++previewRequestId;
+      const rows = document.querySelector('#previewDepartures');
+      const note = document.querySelector('#previewNote');
+      const stationId = document.querySelector(`#station${slot}`).value;
+      rows.replaceChildren(...[0, 1].map(() => {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td>—</td><td>—</td>';
+        return row;
+      }));
+      if (!stationId) {
+        note.textContent = 'Haltestelle nicht konfiguriert';
+        return;
+      }
+      note.textContent = 'Fahrplandaten werden geladen…';
+      try {
+        const response = await fetch(`/api/departures?slot=${slot}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        if (requestId !== previewRequestId || slot !== activePreviewSlot) return;
+        document.querySelector('#previewStation').textContent = data.station ? `Haltestelle · ${data.station}` : `Haltestelle · ${configuredSlots[slot]}`;
+        rows.replaceChildren(...data.departures.slice(0, 2).map(departure => {
+          const row = document.createElement('tr');
+          const line = document.createElement('td');
+          line.textContent = departure.line || '—';
+          const time = document.createElement('td');
+          const minutes = Math.max(0, Math.ceil((new Date(departure.time).getTime() - Date.now()) / 60000));
+          time.textContent = minutes === 0 ? 'Jetzt' : `${minutes} min`;
+          row.append(line, time);
+          return row;
+        }));
+        note.textContent = data.departures.length
+          ? `Aktualisiert ${new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`
+          : 'Keine Abfahrten verfügbar';
+      } catch {
+        if (requestId !== previewRequestId || slot !== activePreviewSlot) return;
+        note.textContent = 'Fahrplandaten nicht verfügbar';
+      }
+    }
+    function selectStation(station) {
+      document.querySelector(`#station${activeStationSlot}`).value = station.hafasId;
+      document.querySelector(`#stationName${activeStationSlot}`).value = station.name;
+      configuredSlots[activeStationSlot] = station.name;
+      if (Number(document.querySelector('#defaultSlot').value) === activeStationSlot) renderPreview(activeStationSlot);
+      stationDialog.close();
+    }
+    function focusStation(station) {
+      const marker = stationMarkers.get(station.hafasId);
+      if (!marker) return selectStation(station);
+      stationMap.setView(marker.getLatLng(), 16);
+      marker.openPopup();
+    }
+    function renderStationResults(query) {
+      stationResults.replaceChildren();
+      const term = query.trim().toLocaleLowerCase('de');
+      if (term.length < 2) {
+        stationResults.hidden = true;
+        return;
+      }
+      const matches = stationCatalog.filter(station => station.name.toLocaleLowerCase('de').includes(term)).slice(0, 8);
+      if (!matches.length) {
+        const empty = document.createElement('p');
+        empty.className = 'help';
+        empty.textContent = 'Keine Haltestelle gefunden.';
+        stationResults.append(empty);
+      } else {
+        matches.forEach(station => {
+          const result = document.createElement('button');
+          result.type = 'button';
+          result.className = 'station-result';
+          result.textContent = station.name;
+          result.addEventListener('click', () => focusStation(station));
+          stationResults.append(result);
+        });
+      }
+      stationResults.hidden = false;
+    }
+    function initStationMap() {
+      const mapStatus = document.querySelector('#stationMapStatus');
+      if (!window.L || !stationCatalog.length) {
+        mapStatus.hidden = false;
+        mapStatus.textContent = !window.L ? 'Die Karte konnte nicht geladen werden.' : 'Der Haltestellenkatalog konnte nicht geladen werden.';
+        return;
+      }
+      if (stationMap) {
+        stationMap.invalidateSize();
+        return;
+      }
+      stationMap = L.map('stationMap').setView([49.49, 8.47], 10);
+      L.tileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        referrerPolicy: 'strict-origin-when-cross-origin',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap-Mitwirkende</a>'
+      }).addTo(stationMap);
+      const bounds = [];
+      stationCatalog.forEach(station => {
+        if (!Number.isFinite(station.lat) || !Number.isFinite(station.lon) || (station.lat === 0 && station.lon === 0)) return;
+        const marker = L.circleMarker([station.lat, station.lon], { radius: 6, color: '#b95700', weight: 2, fillColor: '#ee7202', fillOpacity: .85 }).addTo(stationMap);
+        const popup = document.createElement('div');
+        popup.className = 'stop-popup';
+        const name = document.createElement('strong');
+        name.textContent = station.name;
+        const selectButton = document.createElement('button');
+        selectButton.type = 'button';
+        selectButton.className = 'primary-button';
+        selectButton.textContent = 'Diese Haltestelle auswählen';
+        selectButton.addEventListener('click', () => selectStation(station));
+        popup.append(name, selectButton);
+        marker.bindPopup(popup);
+        stationMarkers.set(station.hafasId, marker);
+        bounds.push([station.lat, station.lon]);
+      });
+      if (bounds.length) stationMap.fitBounds(bounds, { padding: [18, 18] });
+      stationMapDefaultView = { center: stationMap.getCenter(), zoom: stationMap.getZoom() };
+    }
+    document.querySelectorAll('[data-preview-slot]').forEach(button => button.addEventListener('click', () => renderPreview(Number(button.dataset.previewSlot))));
+    document.querySelectorAll('[data-station-picker]').forEach(button => button.addEventListener('click', () => {
+      activeStationSlot = Number(button.dataset.stationPicker);
+      stationSearch.value = '';
+      renderStationResults('');
+      stationMap?.closePopup();
+      document.querySelector('#stationMapStatus').hidden = true;
+      stationDialog.showModal();
+      requestAnimationFrame(() => {
+        initStationMap();
+        stationMap?.invalidateSize();
+        if (stationMapDefaultView) stationMap.setView(stationMapDefaultView.center, stationMapDefaultView.zoom);
+        stationSearch.focus();
+      });
+    }));
+    stationSearch.addEventListener('input', event => renderStationResults(event.currentTarget.value));
+    stationSearch.addEventListener('keydown', event => {
+      if (event.key !== 'Enter') return;
+      const firstResult = stationResults.querySelector('button');
+      if (firstResult) {
+        event.preventDefault();
+        firstResult.click();
+      }
+    });
+    function renderPageFromHash() {
+      const activeView = pages[location.hash.slice(1)] ? location.hash.slice(1) : 'home';
+      Object.entries(pages).forEach(([name, page]) => { page.hidden = name !== activeView; });
+      document.querySelectorAll('[data-view]').forEach(item => item.setAttribute('aria-current', item.dataset.view === activeView ? 'page' : 'false'));
+    }
+    document.querySelectorAll('[data-view]').forEach(link => link.addEventListener('click', () => {
+      location.hash = link.dataset.view;
+    }));
+    window.addEventListener('hashchange', () => {
+      renderPageFromHash();
+      if (location.hash === '#home') loadPreviewDepartures(activePreviewSlot);
+    });
+    if (!pages[location.hash.slice(1)]) history.replaceState(null, '', '#home');
+    renderPageFromHash();
+
+    function formatUptime(seconds) {
+      const days = Math.floor(seconds / 86400);
+      const hours = Math.floor(seconds % 86400 / 3600);
+      const minutes = Math.floor(seconds % 3600 / 60);
+      return days ? `${days} T. ${hours} Std. ${minutes} Min.` : `${hours} Std. ${minutes} Min.`;
+    }
+
+    async function loadStatus() {
+      try {
+        const response = await fetch('/api/status');
+        if (!response.ok) throw new Error();
+        const info = await response.json();
+        document.querySelector('#firmwareVersion').textContent = info.firmwareVersion;
+        document.querySelector('#footerFirmwareVersion').textContent = info.firmwareVersion;
+        document.querySelector('#apiStatus').textContent = info.apiStatus;
+        document.querySelector('#apiDot').classList.toggle('online', info.apiConnected === true);
+        const connection = info.wifiConnected ? 'Verbunden' : (info.wifiSsid.includes('Setup') ? 'Einrichtungsnetz' : 'Nicht verbunden');
+        document.querySelector('#wifiDetails').textContent = `${connection}: ${info.wifiSsid}`;
+        document.querySelector('#wifiSignal').textContent = info.wifiConnected ? `${info.wifiRssi} dBm` : 'Nicht verbunden';
+        document.querySelector('#wifiIp').textContent = info.wifiIp;
+        document.querySelector('#macAddress').textContent = info.macAddress;
+        document.querySelector('#uptime').textContent = formatUptime(info.uptimeSeconds);
+      } catch {
+        document.querySelector('#firmwareVersion').textContent = 'Nicht verfügbar';
+        document.querySelector('#footerFirmwareVersion').textContent = 'Nicht verfügbar';
+        document.querySelector('#apiStatus').textContent = 'Nicht verfügbar';
+        document.querySelector('#wifiDetails').textContent = 'Nicht verfügbar';
+        document.querySelector('#wifiSignal').textContent = 'Nicht verfügbar';
+        document.querySelector('#wifiIp').textContent = 'Nicht verfügbar';
+        document.querySelector('#macAddress').textContent = 'Nicht verfügbar';
+        document.querySelector('#uptime').textContent = 'Nicht verfügbar';
+      }
+    }
+
+    async function loadConfig() {
+      try {
+        const response = await fetch('/api/config');
+        if (!response.ok) throw new Error();
+        const config = await response.json();
+        document.querySelector('#wifiSsid').value = config.wifiSsid || '';
+        document.querySelector('#hostname').value = config.hostname || 'rnv-table-station';
+        document.querySelector('#screenBrightness').value = config.screenBrightness ?? 100;
+        document.querySelector('#brightnessValue').value = `${document.querySelector('#screenBrightness').value} %`;
+        document.querySelector('#screenFlip').setAttribute('aria-pressed', config.screenFlipped === true ? 'true' : 'false');
+        updateFlipButton();
+        document.querySelector('#defaultSlot').value = config.defaultSlot ?? 0;
+        configuredSlots = ['', '', ''];
+        (config.slots || []).slice(0, 3).forEach((slot, index) => {
+          const hafasId = String(slot || '');
+          const station = stationByHafasId.get(hafasId);
+          document.querySelector(`#station${index}`).value = hafasId;
+          configuredSlots[index] = station?.name || (hafasId ? 'Unbekannte Haltestelle' : '');
+          document.querySelector(`#stationName${index}`).value = configuredSlots[index];
+        });
+        renderPreview(config.defaultSlot ?? 0);
+      } catch {
+        wifiStatus.textContent = 'Einstellungen konnten nicht geladen werden.';
+      }
+    }
+
+    async function saveSettings(data, status, successMessage) {
+      status.textContent = 'Einstellungen werden gespeichert...';
+      try {
+        const response = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (!response.ok) throw new Error('Einstellungen konnten nicht gespeichert werden. Bitte Eingaben prüfen.');
+        status.textContent = `${successMessage} Das Gerät startet neu.`;
+      } catch (error) { status.textContent = error.message; }
+    }
+
+    document.querySelector('#wifi-form').addEventListener('submit', event => {
+      event.preventDefault();
+      saveSettings({
+        wifiSsid: document.querySelector('#wifiSsid').value.trim(),
+        wifiPassword: document.querySelector('#wifiPassword').value
+      }, wifiStatus, 'WLAN-Einstellungen gespeichert.');
+    });
+
+    document.querySelector('#device-form').addEventListener('submit', event => {
+      event.preventDefault();
+      saveSettings({
+        hostname: document.querySelector('#hostname').value.trim(),
+        screenBrightness: Number(document.querySelector('#screenBrightness').value),
+        screenFlipped: document.querySelector('#screenFlip').getAttribute('aria-pressed') === 'true'
+      }, deviceStatus, 'Geräteeinstellungen gespeichert.');
+    });
+
+    document.querySelector('#stations-form').addEventListener('submit', event => {
+      event.preventDefault();
+      saveSettings({
+        defaultSlot: Number(document.querySelector('#defaultSlot').value),
+        slots: [0, 1, 2].map(index => document.querySelector(`#station${index}`).value.trim())
+      }, stationsStatus, 'Haltestellen-Einstellungen gespeichert.');
+    });
+
+    document.querySelector('#resetSettings').addEventListener('click', () => resetDialog.showModal());
+    resetDialog.addEventListener('close', async () => {
+      if (resetDialog.returnValue !== 'reset') return;
+      resetStatus.textContent = 'Einstellungen werden zurückgesetzt...';
+      try {
+        const response = await fetch('/api/reset', { method: 'POST' });
+        if (!response.ok) throw new Error('Einstellungen konnten nicht vollständig zurückgesetzt werden.');
+        resetStatus.textContent = 'Einstellungen gelöscht. Das Gerät startet neu.';
+      } catch (error) { resetStatus.textContent = error.message; }
+    });
+
+    document.querySelector('#update').addEventListener('click', async () => {
+      const file = document.querySelector('#firmware').files[0];
+      if (!file) { otaStatus.textContent = 'Bitte zuerst eine Firmware-Datei auswählen.'; return; }
+      if (!confirm(`${file.name} installieren und das Gerät neu starten?`)) return;
+      otaStatus.textContent = 'Firmware wird installiert...';
+      const body = new FormData(); body.append('firmware', file);
+      try {
+        const response = await fetch('/api/ota', { method: 'POST', body });
+        if (!response.ok) throw new Error('Update fehlgeschlagen. Die bisherige Firmware bleibt aktiv.');
+        otaStatus.textContent = 'Update installiert. Das Gerät startet neu.';
+      } catch (error) { otaStatus.textContent = error.message; }
+    });
+
+    loadStatus();
+    loadConfig();
+    setInterval(loadStatus, 10000);
+    setInterval(() => { if (!pages.home.hidden) loadPreviewDepartures(activePreviewSlot); }, 20000);
+  </script>
+</body>
+</html>
