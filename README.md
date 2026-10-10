@@ -1,75 +1,29 @@
-# RNV-Table-Station
-
 # RNV Table Station
 
-This is a simple Esp32 Project with the Goal to simulate on the screen a stop Station of the RNV (Rhein-Neckar-Verkehr).
-The user should use the webui to config which Station they want to monitor and the screen will simulate a Station screen showing the next stopping Train or bus at the Station with the minutes until Departure.
+RNV Table Station is a compact departure display for RNV stops. It shows the next three departures for a selected stop on a 172 × 320 color screen and refreshes the information every 20 seconds.
 
+Use the built-in web interface to connect the device to Wi-Fi, choose stops, preview departures, and manage the display. You can configure three stop slots and choose which one appears on the screen after startup. The interface also includes a stop search, map, screen brightness control, and firmware update options.
 
-## Hardware
-We are using this hardware:
+## Set up the device
 
-- ESP32 C6
-	- 4 MB FLash
-- Touch LCD 
-	- 1.47 inch
-	- 172 x 320 Pixel
-	- Support for LVGL GUI
+1. Power on the device. If it has not been connected to Wi-Fi, the screen shows a QR code for its setup network.
+2. Scan the QR code with a phone or connect manually to the open Wi-Fi network **RNV-Haltestelle**. If your phone says the network has no internet access, choose to remain connected.
+3. Once connected, use the address shown on the device's screen to open the setup page in a browser. It is usually `http://192.168.4.1`.
+4. Enter the name and password of the Wi-Fi network the device should use, then save. The device restarts and connects to that network.
+5. Find the device's IP address in your router's connected-device list, then open that address in a browser.
+6. In the web interface, select up to three stops and choose the default slot. Save your settings; the device restarts and displays departures for the selected default stop.
 
+If the device cannot connect to its saved Wi-Fi network, it starts the **RNV-Haltestelle** setup network again so you can update the Wi-Fi settings.
 
-## GUI
+## Using the web interface
 
-The on screen gui should basically look like this:
+- **Preview:** Switch between the three configured stop slots and view current departures.
+- **Stops:** Search the RNV stop catalogue or use the map to select stops.
+- **Default slot:** Choose which configured stop appears on the device screen after startup.
+- **Device settings:** Change the device name and screen brightness.
+- **Updates:** Install firmware and filesystem updates from their respective update fields.
+- **Reset:** Erase saved settings, including Wi-Fi credentials, and return the device to first-time setup.
 
+The departure display needs an internet connection to retrieve live schedule information. The map also needs internet access; stop search uses the catalogue stored on the device.
 
-Linie              Abfahrt
-__________________________
-
-3 Sandhofen        2 min
-1 Schönau          12 min
-
-
-When the device is no Setup it should Display a QR code for the WiFi ap Setup.
-
-
-The touch function will be used for swipe gestures, so user can define multiple Slots and stations and can swipe hem through.
-
-
-## WebUI
-
-This will be a simple ui for WiFi Setup, and Station Setup including the Slot assignment and selecting which Slot should be the Default one on boot.
-
-We also want to support OTA.
-
-
-## Tech
-We want to use LittleFs for the filesystem. we also want to use a Dedicated data Folder with the webui in html form there.
-OTA support too. The webui doesnt Need any authentification.
-
-
-## API
-
-RNV has an api from where we can load all data we Need.
-They use opendata as a Plattform.
-
-This are our test creds:
-clientID=x
-tenantID=x
-clientSecret=x
-resource=x
-hostname=https://graphql-sandbox-dds.rnv-online.de
-
-Only `clientSecret` is read from the local `.env` file. The other API settings are in the build script. GitHub Actions builds require the `CLIENT_SECRET` repository secret.
-
-The firmware reads these settings during a PlatformIO build to fetch live departures for the display preview. It generates a header under `.pio/`; credentials are not sent to the browser. The client secret is still embedded in the firmware binary, so keep builds made with shared credentials private.
-
-The preview requests `/api/departures?slot=0`, `1`, or `2` from the device and refreshes the selected screen every 20 seconds. The device needs internet access and a valid system clock for the RNV API request.
-
-For WebUI development without device setup, add `?debug=1` before the page fragment (for example, `index.html?debug=1#home`). This bypasses setup gating while keeping API requests enabled when available.
-
-Build a filesystem image with PlatformIO's `buildfs` target and upload the generated `.bin` in the separate Dateisystem-Update field. Settings are stored in NVS, so normal firmware and filesystem updates preserve them. A full flash erase still clears NVS.
-
-In the assets Folder are the api Schema and documentation.
-
-
-Happy Building!
+The setup and management pages are available to devices on the same Wi-Fi network and do not require a password. Use the device on a trusted network.
