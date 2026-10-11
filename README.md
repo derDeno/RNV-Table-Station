@@ -6,6 +6,8 @@ RNV Table Station is a compact departure display for RNV stops. It shows the nex
 
 ![RNV Table Station product](assets/product.jpeg)
 
+3D print models: [MakerWorld](https://makerworld.com/de/models/3426359-rnv-table-station#profileId-3905485)
+
 Use the built-in web interface to connect the device to Wi-Fi, choose stops, preview departures, and manage the display. You can configure three stop slots and choose which one appears on the screen after startup. The interface also includes a stop search, map, screen brightness control, and firmware update options.
 
 ## Set up the device
