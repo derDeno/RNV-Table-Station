@@ -2,6 +2,10 @@
 
 RNV Table Station is a compact departure display for RNV stops. It shows the next three departures for a selected stop on a 172 × 320 color screen and refreshes the information every 20 seconds.
 
+![Web interface](assets/webUI.png)
+
+![RNV Table Station product](assets/product.jpeg)
+
 Use the built-in web interface to connect the device to Wi-Fi, choose stops, preview departures, and manage the display. You can configure three stop slots and choose which one appears on the screen after startup. The interface also includes a stop search, map, screen brightness control, and firmware update options.
 
 ## Set up the device
