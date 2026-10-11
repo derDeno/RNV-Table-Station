@@ -27,6 +27,8 @@
     button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #ffad63; outline-offset: 2px; }
     main { width: 100%; max-width: 1120px; flex: 1; margin: 0 auto; padding: 34px 24px 56px; }
     h1 { margin: 0 0 22px; color: var(--blue); font-size: clamp(1.65rem, 4vw, 2rem); line-height: 1.2; }
+    .settings-page-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+    .settings-page-header h1 { margin: 0; }
     h2 { margin: 0; color: var(--blue); font-size: 1.12rem; }
     .home-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .85fr); gap: 20px; align-items: stretch; }
     .card { min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: 0 5px 20px #00254c0b; }
@@ -125,6 +127,7 @@
       .brand { font-size: .94rem; }
       .nav-link { padding: 0 9px; font-size: .9rem; }
       main { padding: 26px 14px 40px; }
+      .settings-page-header { align-items: flex-start; }
       .home-grid { grid-template-columns: 1fr; }
       .preview-wrap { min-height: 360px; }
       .field-grid { grid-template-columns: 1fr; }
@@ -198,7 +201,7 @@
     </section>
 
     <section id="settingsView" class="page" aria-labelledby="settingsTitle" hidden>
-      <h1 id="settingsTitle">Einstellungen</h1>
+      <div class="settings-page-header"><h1 id="settingsTitle">Einstellungen</h1><button id="restartDevice" class="toggle-button" type="button">Gerät neu starten</button></div>
       <div class="settings-stack">
         <details id="wifiSettings" class="card">
           <summary class="card-header"><h2>WLAN</h2></summary>
@@ -214,7 +217,7 @@
             <div><label for="hostname">Gerätename (Hostname)</label><input id="hostname" pattern="[A-Za-z0-9][A-Za-z0-9-]{0,30}[A-Za-z0-9]|[A-Za-z0-9]" maxlength="32" required></div>
             <div><label for="screenBrightness">Bildschirmhelligkeit <output id="brightnessValue" for="screenBrightness">100 %</output></label><input id="screenBrightness" type="range" min="1" max="100" value="100"></div>
             <div class="invert-setting"><input id="screenInverted" type="checkbox"><label for="screenInverted">Bildschirmfarben invertieren</label></div>
-            <div class="actions settings-actions"><button class="primary-button" type="submit">Geräteeinstellungen speichern und neu starten</button><p id="deviceStatus" role="status" aria-live="polite"></p></div>
+            <div class="actions settings-actions"><button class="primary-button" type="submit">Speichern</button><p id="deviceStatus" role="status" aria-live="polite"></p></div>
           </form>
         </details>
         <details class="card">
@@ -225,7 +228,7 @@
             <div><label for="stationName2">Slot 3</label><div class="station-input"><input id="stationName2" readonly placeholder="Haltestelle auswählen"><input id="station2" type="hidden"><button class="picker-button" type="button" data-station-picker="2" aria-label="Haltestelle für Slot 3 auswählen">+</button></div></div>
             <div><label for="defaultSlot">Standardslot beim Start</label><select id="defaultSlot"><option value="0">Slot 1</option><option value="1">Slot 2</option><option value="2">Slot 3</option></select></div>
             <p class="help">Die Haltestellensuche nutzt den RNV-Haltestellenkatalog. Für die Kartenansicht ist eine Internetverbindung erforderlich.</p>
-            <div class="actions settings-actions"><button class="primary-button" type="submit">Haltestellen speichern und neu starten</button><p id="stationsStatus" role="status" aria-live="polite"></p></div>
+            <div class="actions settings-actions"><button class="primary-button" type="submit">Speichern</button><p id="stationsStatus" role="status" aria-live="polite"></p></div>
           </form>
         </details>
       </div>
@@ -643,7 +646,8 @@
       try {
         const response = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
         if (!response.ok) throw new Error('Einstellungen konnten nicht gespeichert werden. Bitte Eingaben prüfen.');
-        status.textContent = `${successMessage} Das Gerät startet neu.`;
+        status.textContent = successMessage;
+        if (!('wifiSsid' in data)) await loadConfig();
       } catch (error) { status.textContent = error.message; }
     }
 
@@ -652,7 +656,7 @@
       saveSettings({
         wifiSsid: document.querySelector('#wifiSsid').value.trim(),
         wifiPassword: document.querySelector('#wifiPassword').value
-      }, wifiStatus, 'WLAN-Einstellungen gespeichert.');
+      }, wifiStatus, 'WLAN-Einstellungen gespeichert. Das Gerät startet neu.');
     });
 
     document.querySelector('#device-form').addEventListener('submit', event => {
@@ -673,6 +677,21 @@
     });
 
     document.querySelector('#resetSettings').addEventListener('click', () => resetDialog.showModal());
+    document.querySelector('#restartDevice').addEventListener('click', async () => {
+      if (!confirm('Gerät jetzt neu starten?')) return;
+      const button = document.querySelector('#restartDevice');
+      button.disabled = true;
+      button.textContent = 'Neustart läuft…';
+      try {
+        const response = await fetch('/api/restart', { method: 'POST' });
+        if (!response.ok) throw new Error();
+      } catch {
+        button.disabled = false;
+        button.textContent = 'Gerät neu starten';
+        alert('Das Gerät konnte nicht neu gestartet werden.');
+      }
+    });
+
     resetDialog.addEventListener('close', async () => {
       if (resetDialog.returnValue !== 'reset') return;
       resetStatus.textContent = 'Einstellungen werden zurückgesetzt...';

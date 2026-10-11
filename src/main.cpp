@@ -26,7 +26,7 @@ bool otaUploadOk = false;
 bool filesystemOtaUploadOk = false;
 bool filesystemOtaStarted = false;
 bool apiConnected = false;
-constexpr char firmwareVersion[] = "0.1.4";
+constexpr char firmwareVersion[] = "0.1.5";
 String filesystemVersion = "Nicht verfügbar";
 String apiAccessToken;
 uint32_t apiTokenExpiresAt = 0;
@@ -664,7 +664,25 @@ void setupRoutes() {
       return;
     }
     config.set(nextConfig);
+    if (updateWifi) {
+      server.send(200, "application/json", "{\"saved\":true}");
+      delay(500);
+      ESP.restart();
+      return;
+    }
+    if (updateDevice) {
+      WiFi.setHostname(config["hostname"]);
+      setScreenBrightness();
+      screenDimmed = false;
+      lastScreenTouch = millis();
+    }
+    showLoadingScreen();
+    setupScreenDrawn = false;
+    lastDisplayRefresh = millis() - 20000UL;
     server.send(200, "application/json", "{\"saved\":true}");
+  });
+  server.on("/api/restart", HTTP_POST, [] {
+    server.send(200, "application/json", "{\"restarting\":true}");
     delay(500);
     ESP.restart();
   });
