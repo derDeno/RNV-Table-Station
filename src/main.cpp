@@ -11,6 +11,7 @@
 #include <time.h>
 #include <Update.h>
 #include <WebServer.h>
+#include <Wire.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include "rnv_root_ca.h"
@@ -25,14 +26,17 @@ bool otaUploadOk = false;
 bool filesystemOtaUploadOk = false;
 bool filesystemOtaStarted = false;
 bool apiConnected = false;
-constexpr char firmwareVersion[] = "0.1.0";
+constexpr char firmwareVersion[] = "0.1.1";
 String filesystemVersion = "Nicht verfügbar";
 String apiAccessToken;
 uint32_t apiTokenExpiresAt = 0;
 uint32_t lastDisplayRefresh = 0;
+uint32_t lastScreenTouch = 0;
+bool screenDimmed = false;
 bool setupClientDetected = false;
 bool setupScreenDrawn = false;
 bool departureScreenActive = false;
+bool departureDataLoaded = false;
 String displayDestinations[3];
 String displayLines[3];
 String displayTimes[3];
@@ -41,9 +45,20 @@ String displayNote;
 uint16_t destinationScrollOffsets[3] = {};
 uint32_t lastDestinationScroll = 0;
 
-void setScreenBrightness() {
-  const int brightness = config["screenBrightness"] | 100;
+void setScreenBrightness(bool dimmed = false) {
+  int brightness = (config["screenBrightness"] | 100) / 2;
+  if (dimmed && brightness > 30) brightness = 30;
   analogWrite(23, brightness * 255 / 100);
+}
+
+bool screenTouched() {
+  if (digitalRead(21) != LOW) return false;
+  Wire.beginTransmission(0x63);
+  Wire.write(0x01);
+  if (Wire.endTransmission() != 0 || Wire.requestFrom(0x63, 14) != 14) return false;
+  uint8_t data[14];
+  if (Wire.readBytes(data, sizeof(data)) != sizeof(data)) return false;
+  return data[1] > 0;
 }
 
 String departureLabel(const String &isoTime) {
@@ -254,6 +269,18 @@ void renderScreen(const char *station, const JsonArrayConst &departures, const c
   }
 }
 
+void showLoadingScreen() {
+  if (!lcdReady) return;
+  lcd->fillScreen(0xFFFF);
+  lcd->setTextColor(0x0129);
+  lcd->setTextSize(2);
+  lcd->setCursor((lcd->width() - 14 * 12) / 2, lcd->height() / 2 - 24);
+  lcd->print("Fahrplandaten");
+  lcd->setCursor((lcd->width() - 14 * 12) / 2, lcd->height() / 2);
+  lcd->print("werden geladen");
+  departureScreenActive = false;
+}
+
 void showSetupScreen() {
   if (!lcdReady) return;
   departureScreenActive = false;
@@ -306,9 +333,10 @@ void showSetupScreen() {
 void showDepartures(const String &body) {
   StaticJsonDocument<2048> result;
   if (deserializeJson(result, body)) {
-    renderScreen(nullptr, JsonArrayConst(), "Fahrplandaten nicht verfuegbar");
+    if (departureDataLoaded) renderScreen(nullptr, JsonArrayConst(), "Fahrplandaten nicht verfuegbar");
     return;
   }
+  departureDataLoaded = true;
   renderScreen(result["station"] | "", result["departures"].as<JsonArrayConst>());
 }
 
@@ -508,7 +536,7 @@ void setupRoutes() {
     const int status = fetchDepartures(slot, resultBody);
     if (slot == (config["defaultSlot"] | 0)) {
       if (status == 200) showDepartures(resultBody);
-      else renderScreen(nullptr, JsonArrayConst(), "Fahrplandaten nicht verfuegbar");
+      else if (departureDataLoaded) renderScreen(nullptr, JsonArrayConst(), "Fahrplandaten nicht verfuegbar");
     }
     server.send(status, "application/json", resultBody);
   });
@@ -549,9 +577,10 @@ void setupRoutes() {
     }
     const bool updateWifi = incoming.containsKey("wifiSsid") || incoming.containsKey("wifiPassword");
     const bool updateStations = incoming.containsKey("slots") || incoming.containsKey("defaultSlot");
-    const bool updateDevice = incoming.containsKey("hostname") || incoming.containsKey("screenBrightness");
+    const bool updateDevice = incoming.containsKey("hostname") || incoming.containsKey("screenBrightness") ||
+                              incoming.containsKey("screenInverted");
     const int updateGroups = updateWifi + updateStations + updateDevice;
-    const size_t expectedFields = 2;
+    const size_t expectedFields = updateDevice && incoming.containsKey("screenInverted") ? 3 : 2;
     if (updateGroups != 1 || incoming.size() != expectedFields) {
       server.send(400, "application/json", "{\"error\":\"Send one settings group at a time\"}");
       return;
@@ -594,7 +623,8 @@ void setupRoutes() {
       nextConfig["slots"].set(incoming["slots"]);
     } else {
       if (!incoming["hostname"].is<const char *>() ||
-          !incoming["screenBrightness"].is<int>()) {
+          !incoming["screenBrightness"].is<int>() ||
+          (incoming.containsKey("screenInverted") && !incoming["screenInverted"].is<bool>())) {
         server.send(400, "application/json", "{\"error\":\"Invalid device settings\"}");
         return;
       }
@@ -617,6 +647,7 @@ void setupRoutes() {
       }
       nextConfig["hostname"] = hostname;
       nextConfig["screenBrightness"] = brightness;
+      if (incoming.containsKey("screenInverted")) nextConfig["screenInverted"] = incoming["screenInverted"];
     }
 
     if (!saveConfig(nextConfig)) {
@@ -714,13 +745,21 @@ void setup() {
   }
   if (!config.containsKey("hostname")) config["hostname"] = "rnv-table-station";
   if (!config.containsKey("screenBrightness")) config["screenBrightness"] = 100;
+  if (!config.containsKey("screenInverted")) config["screenInverted"] = true;
   pinMode(23, OUTPUT);
+  Wire.begin(18, 19);
+  pinMode(21, INPUT_PULLUP);
+  pinMode(20, OUTPUT);
+  digitalWrite(20, LOW);
+  delay(200);
+  digitalWrite(20, HIGH);
+  delay(300);
   if (lcd->begin()) {
     lcdReady = true;
     lcd->setRotation(5);
-    lcd->invertDisplay(true);
+    lcd->invertDisplay(config["screenInverted"] | true);
     setScreenBrightness();
-    renderScreen(nullptr, JsonArrayConst(), "Fahrplandaten werden geladen");
+    showLoadingScreen();
   } else {
     Serial.println("LCD initialization failed");
   }
@@ -743,10 +782,22 @@ void setup() {
   setupRoutes();
   server.begin();
   lastDisplayRefresh = millis() - 20000UL;
+  lastScreenTouch = millis();
 }
 
 void loop() {
   server.handleClient();
+  if (lcdReady && screenTouched()) {
+    lastScreenTouch = millis();
+    if (screenDimmed) {
+      screenDimmed = false;
+      setScreenBrightness();
+    }
+  } else if (lcdReady && !screenDimmed && millis() - lastScreenTouch >= 60000UL &&
+             ((config["screenBrightness"] | 100) / 2) > 30) {
+    screenDimmed = true;
+    setScreenBrightness(true);
+  }
   if (WiFi.getMode() & WIFI_AP) showSetupScreen();
   else if (departureScreenActive && millis() - lastDestinationScroll >= 500UL) {
     lastDestinationScroll = millis();
@@ -758,7 +809,7 @@ void loop() {
       String resultBody;
       const uint8_t slot = config["defaultSlot"] | 0;
       if (fetchDepartures(slot, resultBody) == 200) showDepartures(resultBody);
-      else renderScreen(nullptr, JsonArrayConst(), "Fahrplandaten nicht verfuegbar");
+      else if (departureDataLoaded) renderScreen(nullptr, JsonArrayConst(), "Fahrplandaten nicht verfuegbar");
     }
   }
 }

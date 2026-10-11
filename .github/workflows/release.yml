@@ -43,7 +43,7 @@ jobs:
         run: |
           firmware_version=$(sed -nE 's/.*firmwareVersion\[\] = "([^"]+)";.*/\1/p' src/main.cpp)
           tag="v${firmware_version}"
-          title="RNV Table Station ${tag}"
+          title="Firmware ${tag}"
           notes="Built from PR #${PR_NUMBER} at commit ${PR_HEAD_SHA}."
 
           if gh release view "$tag" >/dev/null 2>&1; then
