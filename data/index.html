@@ -619,9 +619,9 @@
         if (!response.ok) throw new Error();
         const release = await response.json();
         const assets = release.assets || [];
-        const firmwareAsset = assets.find(asset => /^firmware-/.test(asset.name)) || assets.find(asset => /^ota-/.test(asset.name));
+        const firmwareAsset = assets.find(asset => /^firmware-/.test(asset.name));
         const filesystemAsset = assets.find(asset => /^filesystem-/.test(asset.name));
-        const firmware = firmwareAsset?.name.match(/^(?:firmware|ota)-(\d+\.\d+\.\d+)(?:\.bin)?$/)?.[1];
+        const firmware = firmwareAsset?.name.match(/^firmware-(\d+\.\d+\.\d+)(?:\.bin)?$/)?.[1];
         const filesystem = filesystemAsset?.name.match(/^filesystem-(\d+\.\d+\.\d+)(?:\.bin)?$/)?.[1];
         latestRelease = { firmware, filesystem };
         renderVersions();
