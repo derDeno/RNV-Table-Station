@@ -26,7 +26,7 @@ bool otaUploadOk = false;
 bool filesystemOtaUploadOk = false;
 bool filesystemOtaStarted = false;
 bool apiConnected = false;
-constexpr char firmwareVersion[] = "0.1.1";
+constexpr char firmwareVersion[] = "0.1.2";
 String filesystemVersion = "Nicht verfügbar";
 String apiAccessToken;
 uint32_t apiTokenExpiresAt = 0;
@@ -44,6 +44,10 @@ String displayStation;
 String displayNote;
 uint16_t destinationScrollOffsets[3] = {};
 uint32_t lastDestinationScroll = 0;
+
+uint16_t displayColor(uint16_t color) {
+  return (config["screenInverted"] | false) ? static_cast<uint16_t>(~color) : color;
+}
 
 void setScreenBrightness(bool dimmed = false) {
   int brightness = (config["screenBrightness"] | 100) / 2;
@@ -153,7 +157,7 @@ void renderDestinationCells(int width, bool advance) {
     const size_t characterCount = utf8Length(destination);
     if (advance && characterCount <= maxChars) continue;
     const int y = rowTop + row * rowHeight;
-    lcd->setTextColor(0x1168, 0xFFFF);
+    lcd->setTextColor(displayColor(0x1168), displayColor(0xFFFF));
     lcd->setCursor(destinationX, y + 2);
     if (characterCount <= maxChars) {
       printUtf8(characterCount ? destination : "--");
@@ -182,23 +186,23 @@ void renderScreen(const char *station, const JsonArrayConst &departures, const c
   constexpr uint16_t rowLine = 0xE75D;
   const int width = lcd->width();
   if (fullRedraw) {
-    lcd->fillScreen(0xFFFF);
-    lcd->fillRect(0, 24, width, 22, blue);
+    lcd->fillScreen(displayColor(0xFFFF));
+    lcd->fillRect(0, 24, width, 22, displayColor(blue));
     lcd->setTextSize(2);
-    lcd->setTextColor(0xFFFF);
+    lcd->setTextColor(displayColor(0xFFFF));
     lcd->setCursor(46, 27);
     lcd->print("Ziel");
     lcd->setCursor(width - 4 - 7 * 12, 27);
     lcd->print("Abfahrt");
-    for (size_t i = 0; i < 3; ++i) lcd->drawFastHLine(0, 48 + i * 30 + 24, width, rowLine);
+    for (size_t i = 0; i < 3; ++i) lcd->drawFastHLine(0, 48 + i * 30 + 24, width, displayColor(rowLine));
   }
   lcd->setTextWrap(false);
   const String stationName = station && *station ? station : "Haltestelle nicht konfiguriert";
   if (fullRedraw || stationName != displayStation) {
-    lcd->fillRect(0, 0, width, 24, 0xFFFF);
+    lcd->fillRect(0, 0, width, 24, displayColor(0xFFFF));
     const size_t stationLength = utf8Length(stationName);
     lcd->setTextSize(stationLength > 25 ? 1 : 2);
-    lcd->setTextColor(blue, 0xFFFF);
+    lcd->setTextColor(displayColor(blue), displayColor(0xFFFF));
     lcd->setCursor(max(4, (width - static_cast<int>(stationLength) * (stationLength > 25 ? 6 : 12)) / 2), 4);
     printUtf8(stationName);
     displayStation = stationName;
@@ -219,16 +223,16 @@ void renderScreen(const char *station, const JsonArrayConst &departures, const c
       destination = departure["destination"] | "";
     }
     if (fullRedraw || line != displayLines[i]) {
-      if (!fullRedraw) lcd->fillRect(0, y, 46, 24, 0xFFFF);
-      lcd->setTextColor(text, 0xFFFF);
+      if (!fullRedraw) lcd->fillRect(0, y, 46, 24, displayColor(0xFFFF));
+      lcd->setTextColor(displayColor(text), displayColor(0xFFFF));
       lcd->setTextSize(2);
       lcd->setCursor(4, y + 2);
       printUtf8(line);
       displayLines[i] = line;
     }
     if (fullRedraw || time != displayTimes[i]) {
-      if (!fullRedraw) lcd->fillRect(width - 92, y, 88, 24, 0xFFFF);
-      lcd->setTextColor(text, 0xFFFF);
+      if (!fullRedraw) lcd->fillRect(width - 92, y, 88, 24, displayColor(0xFFFF));
+      lcd->setTextColor(displayColor(text), displayColor(0xFFFF));
       lcd->setTextSize(2);
       lcd->setCursor(width - 4 - time.length() * 12, y + 2);
       printUtf8(time);
@@ -237,7 +241,7 @@ void renderScreen(const char *station, const JsonArrayConst &departures, const c
     if (destination != displayDestinations[i]) {
       if (!fullRedraw) {
         const int destinationWidth = width - 46 - 88 - 4;
-        lcd->fillRect(46, y, destinationWidth, 24, 0xFFFF);
+        lcd->fillRect(46, y, destinationWidth, 24, displayColor(0xFFFF));
       }
       destinationScrollOffsets[i] = 0;
       displayDestinations[i] = destination;
@@ -259,10 +263,10 @@ void renderScreen(const char *station, const JsonArrayConst &departures, const c
     } else note = "Fahrplandaten werden geladen";
   }
   if (fullRedraw || note != displayNote) {
-    lcd->fillRect(0, 148, width, 20, 0xFFFF);
+    lcd->fillRect(0, 148, width, 20, displayColor(0xFFFF));
     const size_t noteLength = utf8Length(note);
     lcd->setTextSize(noteLength > 25 ? 1 : 2);
-    lcd->setTextColor(muted, 0xFFFF);
+    lcd->setTextColor(displayColor(muted), displayColor(0xFFFF));
     lcd->setCursor(max(4, (width - static_cast<int>(noteLength) * (noteLength > 25 ? 6 : 12)) / 2), 150);
     printUtf8(note);
     displayNote = note;
@@ -271,8 +275,8 @@ void renderScreen(const char *station, const JsonArrayConst &departures, const c
 
 void showLoadingScreen() {
   if (!lcdReady) return;
-  lcd->fillScreen(0xFFFF);
-  lcd->setTextColor(0x0129);
+  lcd->fillScreen(displayColor(0xFFFF));
+  lcd->setTextColor(displayColor(0x0129));
   lcd->setTextSize(2);
   lcd->setCursor((lcd->width() - 14 * 12) / 2, lcd->height() / 2 - 24);
   lcd->print("Fahrplandaten");
@@ -292,8 +296,8 @@ void showSetupScreen() {
   setupScreenDrawn = true;
   if (setupClientDetected) {
     const String ip = WiFi.softAPIP().toString();
-    lcd->fillScreen(0x0000);
-    lcd->setTextColor(0xFFFF);
+    lcd->fillScreen(displayColor(0x0000));
+    lcd->setTextColor(displayColor(0xFFFF));
     lcd->setTextSize(3);
     lcd->setCursor((lcd->width() - ip.length() * 18) / 2, (lcd->height() - 24) / 2);
     lcd->print(ip);
@@ -312,15 +316,15 @@ void showSetupScreen() {
   constexpr int qrX = 8;
   const int qrSize = (qr.size + quietZone * 2) * scale;
   const int qrY = (lcd->height() - qrSize) / 2;
-  lcd->fillScreen(0x0000);
+  lcd->fillScreen(displayColor(0x0000));
   for (uint8_t y = 0; y < qr.size; ++y) {
     for (uint8_t x = 0; x < qr.size; ++x) {
       if (qrcode_getModule(&qr, x, y)) {
-        lcd->fillRect(qrX + (x + quietZone) * scale, qrY + (y + quietZone) * scale, scale, scale, 0xFFFF);
+        lcd->fillRect(qrX + (x + quietZone) * scale, qrY + (y + quietZone) * scale, scale, scale, displayColor(0xFFFF));
       }
     }
   }
-  lcd->setTextColor(0xFFFF);
+  lcd->setTextColor(displayColor(0xFFFF));
   lcd->setTextSize(2);
   lcd->setCursor(220, 62);
   lcd->print("Zum");
@@ -745,7 +749,7 @@ void setup() {
   }
   if (!config.containsKey("hostname")) config["hostname"] = "rnv-table-station";
   if (!config.containsKey("screenBrightness")) config["screenBrightness"] = 100;
-  if (!config.containsKey("screenInverted")) config["screenInverted"] = true;
+  if (!config.containsKey("screenInverted")) config["screenInverted"] = false;
   pinMode(23, OUTPUT);
   Wire.begin(18, 19);
   pinMode(21, INPUT_PULLUP);
@@ -757,7 +761,7 @@ void setup() {
   if (lcd->begin()) {
     lcdReady = true;
     lcd->setRotation(5);
-    lcd->invertDisplay(config["screenInverted"] | true);
+    lcd->invertDisplay(false);
     setScreenBrightness();
     showLoadingScreen();
   } else {
