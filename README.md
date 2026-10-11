@@ -20,7 +20,7 @@ If the device cannot connect to its saved Wi-Fi network, it starts the **RNV-Hal
 - **Preview:** Switch between the three configured stop slots and view current departures.
 - **Stops:** Search the RNV stop catalogue or use the map to select stops.
 - **Default slot:** Choose which configured stop appears on the device screen after startup.
-- **Device settings:** Change the device name and screen brightness.
+- **Device settings:** Change the device name, screen brightness, and whether screen colors are inverted. The display uses at most half the configured brightness (up to 50%) and dims to 30% after one minute without touch; touching the screen restores the configured level and restarts the timer.
 - **Updates:** Install firmware and filesystem updates from their respective update fields.
 - **Reset:** Erase saved settings, including Wi-Fi credentials, and return the device to first-time setup.
 

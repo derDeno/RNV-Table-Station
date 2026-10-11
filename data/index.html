@@ -74,6 +74,7 @@
     input, select { width: 100%; min-height: 44px; border: 1px solid #bdc9d1; border-radius: 7px; padding: 9px 11px; background: white; color: inherit; font: inherit; }
     input[readonly] { background: #f8fafb; }
     input[type="range"] { min-height: 32px; padding: 0; accent-color: var(--orange); }
+    input[type="checkbox"] { width: auto; min-height: auto; }
     input[type="file"] { padding: 6px; }
     .help { margin: 6px 0 0; color: var(--muted); font-size: .86rem; }
     .slot-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -209,6 +210,7 @@
           <form id="device-form" class="settings-body field-grid">
             <div><label for="hostname">Gerätename (Hostname)</label><input id="hostname" pattern="[A-Za-z0-9][A-Za-z0-9-]{0,30}[A-Za-z0-9]|[A-Za-z0-9]" maxlength="32" required></div>
             <div><label for="screenBrightness">Bildschirmhelligkeit <output id="brightnessValue" for="screenBrightness">100 %</output></label><input id="screenBrightness" type="range" min="1" max="100" value="100"></div>
+            <div><label for="screenInverted">Bildschirmfarben invertieren</label><input id="screenInverted" type="checkbox"></div>
             <div class="actions settings-actions"><button class="primary-button" type="submit">Geräteeinstellungen speichern und neu starten</button><p id="deviceStatus" role="status" aria-live="polite"></p></div>
           </form>
         </details>
@@ -605,6 +607,7 @@
         document.querySelector('#hostname').value = config.hostname || 'rnv-table-station';
         document.querySelector('#screenBrightness').value = config.screenBrightness ?? 100;
         document.querySelector('#brightnessValue').value = `${document.querySelector('#screenBrightness').value} %`;
+        document.querySelector('#screenInverted').checked = config.screenInverted ?? true;
         document.querySelector('#defaultSlot').value = config.defaultSlot ?? 0;
         configuredSlots = ['', '', ''];
         (config.slots || []).slice(0, 3).forEach((slot, index) => {
@@ -642,7 +645,8 @@
       event.preventDefault();
       saveSettings({
         hostname: document.querySelector('#hostname').value.trim(),
-        screenBrightness: Number(document.querySelector('#screenBrightness').value)
+        screenBrightness: Number(document.querySelector('#screenBrightness').value),
+        screenInverted: document.querySelector('#screenInverted').checked
       }, deviceStatus, 'Geräteeinstellungen gespeichert.');
     });
 
