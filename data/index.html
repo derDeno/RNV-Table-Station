@@ -274,6 +274,17 @@
     </form>
   </dialog>
 
+  <dialog id="restartDialog" aria-labelledby="restartDialogTitle" aria-describedby="restartDialogDescription">
+    <form method="dialog">
+      <h2 id="restartDialogTitle">Gerät neu starten?</h2>
+      <p id="restartDialogDescription">Das Gerät wird neu gestartet. Die Webseite ist währenddessen kurz nicht erreichbar.</p>
+      <div class="actions">
+        <button class="toggle-button" value="cancel">Abbrechen</button>
+        <button class="primary-button" value="restart">Neu starten</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="otaDialog" aria-labelledby="otaDialogTitle" aria-describedby="otaDialogMessage">
     <h2 id="otaDialogTitle">Update wird installiert</h2>
     <p id="otaDialogMessage" role="status" aria-live="polite">Bitte warten und diese Seite nicht schließen.</p>
@@ -313,6 +324,7 @@
     let otaInProgress = false;
     const resetStatus = document.querySelector('#resetStatus');
     const resetDialog = document.querySelector('#resetDialog');
+    const restartDialog = document.querySelector('#restartDialog');
     const stationDialog = document.querySelector('#stationDialog');
     const stationSearch = document.querySelector('#stationSearch');
     const stationResults = document.querySelector('#stationResults');
@@ -677,8 +689,9 @@
     });
 
     document.querySelector('#resetSettings').addEventListener('click', () => resetDialog.showModal());
-    document.querySelector('#restartDevice').addEventListener('click', async () => {
-      if (!confirm('Gerät jetzt neu starten?')) return;
+    document.querySelector('#restartDevice').addEventListener('click', () => restartDialog.showModal());
+    restartDialog.addEventListener('close', async () => {
+      if (restartDialog.returnValue !== 'restart') return;
       const button = document.querySelector('#restartDevice');
       button.disabled = true;
       button.textContent = 'Neustart läuft…';
