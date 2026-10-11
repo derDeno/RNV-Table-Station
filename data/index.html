@@ -322,6 +322,7 @@
     const otaProgress = document.querySelector('#otaProgress');
     const otaDialogClose = document.querySelector('#otaDialogClose');
     let otaInProgress = false;
+    function reloadAfterRestart() { setTimeout(() => location.reload(), 12000); }
     const resetStatus = document.querySelector('#resetStatus');
     const resetDialog = document.querySelector('#resetDialog');
     const restartDialog = document.querySelector('#restartDialog');
@@ -658,8 +659,13 @@
       try {
         const response = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
         if (!response.ok) throw new Error('Einstellungen konnten nicht gespeichert werden. Bitte Eingaben prüfen.');
-        status.textContent = successMessage;
-        if (!('wifiSsid' in data)) await loadConfig();
+        if ('wifiSsid' in data) {
+          status.textContent = `${successMessage} Die Seite wird nach dem Neustart neu geladen.`;
+          reloadAfterRestart();
+        } else {
+          status.textContent = successMessage;
+          await loadConfig();
+        }
       } catch (error) { status.textContent = error.message; }
     }
 
@@ -698,6 +704,7 @@
       try {
         const response = await fetch('/api/restart', { method: 'POST' });
         if (!response.ok) throw new Error();
+        reloadAfterRestart();
       } catch {
         button.disabled = false;
         button.textContent = 'Gerät neu starten';
@@ -712,6 +719,7 @@
         const response = await fetch('/api/reset', { method: 'POST' });
         if (!response.ok) throw new Error('Einstellungen konnten nicht vollständig zurückgesetzt werden.');
         resetStatus.textContent = 'Einstellungen gelöscht. Das Gerät startet neu.';
+        reloadAfterRestart();
       } catch (error) { resetStatus.textContent = error.message; }
     });
 
@@ -746,9 +754,10 @@
         otaInProgress = false;
         if (request.status >= 200 && request.status < 300) {
           otaDialogTitle.textContent = 'Update erfolgreich';
-          otaDialogMessage.textContent = `${title} wurde installiert. Das Gerät startet neu.`;
+          otaDialogMessage.textContent = `${title} wurde installiert. Das Gerät startet neu. Die Seite wird anschließend neu geladen.`;
           otaProgress.value = 100;
           otaProgress.setAttribute('value', '100');
+          reloadAfterRestart();
         } else {
           otaDialogTitle.textContent = 'Update fehlgeschlagen';
           otaDialogMessage.textContent = 'Das Update konnte nicht installiert werden.';
