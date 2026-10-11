@@ -31,8 +31,8 @@ jobs:
           mkdir -p artifacts
           firmware_version=$(sed -nE 's/.*firmwareVersion\[\] = "([^"]+)";.*/\1/p' src/main.cpp)
           filesystem_version=$(tr -d '\r\n' < data/version.txt)
-          cp .pio/build/esp32-c6-devkitc-1/firmware.factory.bin "artifacts/full-${firmware_version}.bin"
-          cp .pio/build/esp32-c6-devkitc-1/firmware.bin "artifacts/ota-${firmware_version}.bin"
+          cp .pio/build/esp32-c6-devkitc-1/firmware.factory.bin "artifacts/full-flash-${firmware_version}.bin"
+          cp .pio/build/esp32-c6-devkitc-1/firmware.bin "artifacts/firmware-${firmware_version}.bin"
           cp .pio/build/esp32-c6-devkitc-1/littlefs.bin "artifacts/filesystem-${filesystem_version}.bin"
       - name: Create or update draft release
         env:
