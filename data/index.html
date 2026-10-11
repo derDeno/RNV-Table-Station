@@ -117,6 +117,8 @@
     .github-link { display: inline-flex; align-items: center; gap: 7px; color: var(--blue); font-weight: 400; text-decoration: none; }
     .github-link:hover { text-decoration: underline; }
     .github-link svg { width: 19px; height: 19px; fill: currentColor; }
+    .update-badge { display: inline-block; margin-left: 8px; border-radius: 999px; padding: 2px 9px; background: var(--orange); color: white; font-size: .78rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+    .update-badge:hover { background: #d96500; }
     [hidden] { display: none !important; }
     body.setup-pending nav, body.setup-pending main > .page, body.setup-pending .site-footer { display: none; }
     body.setup-ap nav, body.setup-ap #homeView,
@@ -345,6 +347,10 @@
     let leafletLoadStarted = false;
     let leafletPromise;
     let configuredSlots = ['', '', ''];
+    let localFirmwareVersion = '';
+    let localFilesystemVersion = '';
+    let latestRelease = null;
+    let releaseCheckPending = false;
     if (debugMode) {
       document.body.classList.remove('setup-pending');
       setupNotice.hidden = true;
@@ -578,6 +584,54 @@
       return days ? `${days} T. ${hours} Std. ${minutes} Min.` : `${hours} Std. ${minutes} Min.`;
     }
 
+    function isNewerVersion(candidate, current) {
+      if (!/^\d+\.\d+\.\d+$/.test(candidate) || !/^\d+\.\d+\.\d+$/.test(current)) return false;
+      const [candidateMajor, candidateMinor, candidatePatch] = candidate.split('.').map(Number);
+      const [currentMajor, currentMinor, currentPatch] = current.split('.').map(Number);
+      return candidateMajor > currentMajor || candidateMajor === currentMajor &&
+        (candidateMinor > currentMinor || candidateMinor === currentMinor && candidatePatch > currentPatch);
+    }
+
+    function renderVersion(id, current, latest, label) {
+      const element = document.querySelector(`#${id}`);
+      element.replaceChildren(document.createTextNode(current || 'Nicht verfügbar'));
+      if (!latestRelease || !isNewerVersion(latest, current)) return;
+      const badge = document.createElement('a');
+      badge.className = 'update-badge';
+      badge.href = 'https://github.com/derDeno/RNV-Table-Station/releases/latest';
+      badge.target = '_blank';
+      badge.rel = 'noopener noreferrer';
+      badge.textContent = `Update ${latest}`;
+      badge.setAttribute('aria-label', `${label}-Update auf ${latest} verfügbar. Release-Seite öffnen.`);
+      element.append(' ', badge);
+    }
+
+    function renderVersions() {
+      renderVersion('firmwareVersion', localFirmwareVersion, latestRelease?.firmware, 'Firmware');
+      renderVersion('filesystemVersion', localFilesystemVersion, latestRelease?.filesystem, 'Dateisystem');
+    }
+
+    async function checkLatestRelease() {
+      if (latestRelease || releaseCheckPending) return;
+      releaseCheckPending = true;
+      try {
+        const response = await fetch('https://api.github.com/repos/derDeno/RNV-Table-Station/releases/latest', { cache: 'no-store' });
+        if (!response.ok) throw new Error();
+        const release = await response.json();
+        const assets = release.assets || [];
+        const firmwareAsset = assets.find(asset => /^firmware-/.test(asset.name)) || assets.find(asset => /^ota-/.test(asset.name));
+        const filesystemAsset = assets.find(asset => /^filesystem-/.test(asset.name));
+        const firmware = firmwareAsset?.name.match(/^(?:firmware|ota)-(\d+\.\d+\.\d+)(?:\.bin)?$/)?.[1];
+        const filesystem = filesystemAsset?.name.match(/^filesystem-(\d+\.\d+\.\d+)(?:\.bin)?$/)?.[1];
+        latestRelease = { firmware, filesystem };
+        renderVersions();
+      } catch {
+        // Retry on the next device status refresh if GitHub is temporarily unavailable.
+      } finally {
+        releaseCheckPending = false;
+      }
+    }
+
     async function loadStatus() {
       try {
         const response = await fetch('/api/status', { cache: 'no-store' });
@@ -597,8 +651,10 @@
         }
         renderPageFromHash();
         if (!setupApActive && !leafletLoadStarted) loadLeaflet().catch(() => {});
-        document.querySelector('#firmwareVersion').textContent = info.firmwareVersion;
-        document.querySelector('#filesystemVersion').textContent = info.filesystemVersion || 'Nicht verfügbar';
+        localFirmwareVersion = info.firmwareVersion || '';
+        localFilesystemVersion = info.filesystemVersion || '';
+        renderVersions();
+        if (!setupApActive) checkLatestRelease();
         document.querySelector('#apiStatus').textContent = info.apiStatus;
         document.querySelector('#apiDot').classList.toggle('online', info.apiConnected === true);
         const connection = info.wifiConnected ? 'Verbunden' : (info.wifiSsid.includes('Setup') ? 'Einrichtungsnetz' : 'Nicht verbunden');
@@ -608,8 +664,9 @@
         document.querySelector('#macAddress').textContent = info.macAddress;
         document.querySelector('#uptime').textContent = formatUptime(info.uptimeSeconds);
       } catch {
-        document.querySelector('#firmwareVersion').textContent = 'Nicht verfügbar';
-        document.querySelector('#filesystemVersion').textContent = 'Nicht verfügbar';
+        localFirmwareVersion = '';
+        localFilesystemVersion = '';
+        renderVersions();
         document.querySelector('#apiStatus').textContent = 'Nicht verfügbar';
         document.querySelector('#wifiDetails').textContent = 'Nicht verfügbar';
         document.querySelector('#wifiSignal').textContent = 'Nicht verfügbar';

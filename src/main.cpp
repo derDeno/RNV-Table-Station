@@ -26,7 +26,7 @@ bool otaUploadOk = false;
 bool filesystemOtaUploadOk = false;
 bool filesystemOtaStarted = false;
 bool apiConnected = false;
-constexpr char firmwareVersion[] = "0.1.8";
+constexpr char firmwareVersion[] = "0.1.9";
 String filesystemVersion = "Nicht verfügbar";
 String apiAccessToken;
 uint32_t apiTokenExpiresAt = 0;
