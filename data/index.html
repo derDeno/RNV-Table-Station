@@ -117,6 +117,8 @@
     .github-link { display: inline-flex; align-items: center; gap: 7px; color: var(--blue); font-weight: 400; text-decoration: none; }
     .github-link:hover { text-decoration: underline; }
     .github-link svg { width: 19px; height: 19px; fill: currentColor; }
+    .update-badge { display: inline-block; margin-left: 8px; border-radius: 999px; padding: 2px 9px; background: var(--orange); color: white; font-size: .78rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+    .update-badge:hover { background: #d96500; }
     [hidden] { display: none !important; }
     body.setup-pending nav, body.setup-pending main > .page, body.setup-pending .site-footer { display: none; }
     body.setup-ap nav, body.setup-ap #homeView,
@@ -274,6 +276,17 @@
     </form>
   </dialog>
 
+  <dialog id="restartDialog" aria-labelledby="restartDialogTitle" aria-describedby="restartDialogDescription">
+    <form method="dialog">
+      <h2 id="restartDialogTitle">Gerät neu starten?</h2>
+      <p id="restartDialogDescription">Das Gerät wird neu gestartet. Die Webseite ist währenddessen kurz nicht erreichbar.</p>
+      <div class="actions">
+        <button class="toggle-button" value="cancel">Abbrechen</button>
+        <button class="primary-button" value="restart">Neu starten</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="otaDialog" aria-labelledby="otaDialogTitle" aria-describedby="otaDialogMessage">
     <h2 id="otaDialogTitle">Update wird installiert</h2>
     <p id="otaDialogMessage" role="status" aria-live="polite">Bitte warten und diese Seite nicht schließen.</p>
@@ -311,8 +324,10 @@
     const otaProgress = document.querySelector('#otaProgress');
     const otaDialogClose = document.querySelector('#otaDialogClose');
     let otaInProgress = false;
+    function reloadAfterRestart() { setTimeout(() => location.reload(), 10000); }
     const resetStatus = document.querySelector('#resetStatus');
     const resetDialog = document.querySelector('#resetDialog');
+    const restartDialog = document.querySelector('#restartDialog');
     const stationDialog = document.querySelector('#stationDialog');
     const stationSearch = document.querySelector('#stationSearch');
     const stationResults = document.querySelector('#stationResults');
@@ -332,6 +347,10 @@
     let leafletLoadStarted = false;
     let leafletPromise;
     let configuredSlots = ['', '', ''];
+    let localFirmwareVersion = '';
+    let localFilesystemVersion = '';
+    let latestRelease = null;
+    let releaseCheckPending = false;
     if (debugMode) {
       document.body.classList.remove('setup-pending');
       setupNotice.hidden = true;
@@ -565,6 +584,54 @@
       return days ? `${days} T. ${hours} Std. ${minutes} Min.` : `${hours} Std. ${minutes} Min.`;
     }
 
+    function isNewerVersion(candidate, current) {
+      if (!/^\d+\.\d+\.\d+$/.test(candidate) || !/^\d+\.\d+\.\d+$/.test(current)) return false;
+      const [candidateMajor, candidateMinor, candidatePatch] = candidate.split('.').map(Number);
+      const [currentMajor, currentMinor, currentPatch] = current.split('.').map(Number);
+      return candidateMajor > currentMajor || candidateMajor === currentMajor &&
+        (candidateMinor > currentMinor || candidateMinor === currentMinor && candidatePatch > currentPatch);
+    }
+
+    function renderVersion(id, current, latest, label) {
+      const element = document.querySelector(`#${id}`);
+      element.replaceChildren(document.createTextNode(current || 'Nicht verfügbar'));
+      if (!latestRelease || !isNewerVersion(latest, current)) return;
+      const badge = document.createElement('a');
+      badge.className = 'update-badge';
+      badge.href = 'https://github.com/derDeno/RNV-Table-Station/releases/latest';
+      badge.target = '_blank';
+      badge.rel = 'noopener noreferrer';
+      badge.textContent = `Update ${latest}`;
+      badge.setAttribute('aria-label', `${label}-Update auf ${latest} verfügbar. Release-Seite öffnen.`);
+      element.append(' ', badge);
+    }
+
+    function renderVersions() {
+      renderVersion('firmwareVersion', localFirmwareVersion, latestRelease?.firmware, 'Firmware');
+      renderVersion('filesystemVersion', localFilesystemVersion, latestRelease?.filesystem, 'Dateisystem');
+    }
+
+    async function checkLatestRelease() {
+      if (latestRelease || releaseCheckPending) return;
+      releaseCheckPending = true;
+      try {
+        const response = await fetch('https://api.github.com/repos/derDeno/RNV-Table-Station/releases/latest', { cache: 'no-store' });
+        if (!response.ok) throw new Error();
+        const release = await response.json();
+        const assets = release.assets || [];
+        const firmwareAsset = assets.find(asset => /^firmware-/.test(asset.name));
+        const filesystemAsset = assets.find(asset => /^filesystem-/.test(asset.name));
+        const firmware = firmwareAsset?.name.match(/^firmware-(\d+\.\d+\.\d+)(?:\.bin)?$/)?.[1];
+        const filesystem = filesystemAsset?.name.match(/^filesystem-(\d+\.\d+\.\d+)(?:\.bin)?$/)?.[1];
+        latestRelease = { firmware, filesystem };
+        renderVersions();
+      } catch {
+        // Retry on the next device status refresh if GitHub is temporarily unavailable.
+      } finally {
+        releaseCheckPending = false;
+      }
+    }
+
     async function loadStatus() {
       try {
         const response = await fetch('/api/status', { cache: 'no-store' });
@@ -584,8 +651,10 @@
         }
         renderPageFromHash();
         if (!setupApActive && !leafletLoadStarted) loadLeaflet().catch(() => {});
-        document.querySelector('#firmwareVersion').textContent = info.firmwareVersion;
-        document.querySelector('#filesystemVersion').textContent = info.filesystemVersion || 'Nicht verfügbar';
+        localFirmwareVersion = info.firmwareVersion || '';
+        localFilesystemVersion = info.filesystemVersion || '';
+        renderVersions();
+        if (!setupApActive) checkLatestRelease();
         document.querySelector('#apiStatus').textContent = info.apiStatus;
         document.querySelector('#apiDot').classList.toggle('online', info.apiConnected === true);
         const connection = info.wifiConnected ? 'Verbunden' : (info.wifiSsid.includes('Setup') ? 'Einrichtungsnetz' : 'Nicht verbunden');
@@ -595,8 +664,9 @@
         document.querySelector('#macAddress').textContent = info.macAddress;
         document.querySelector('#uptime').textContent = formatUptime(info.uptimeSeconds);
       } catch {
-        document.querySelector('#firmwareVersion').textContent = 'Nicht verfügbar';
-        document.querySelector('#filesystemVersion').textContent = 'Nicht verfügbar';
+        localFirmwareVersion = '';
+        localFilesystemVersion = '';
+        renderVersions();
         document.querySelector('#apiStatus').textContent = 'Nicht verfügbar';
         document.querySelector('#wifiDetails').textContent = 'Nicht verfügbar';
         document.querySelector('#wifiSignal').textContent = 'Nicht verfügbar';
@@ -646,8 +716,13 @@
       try {
         const response = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
         if (!response.ok) throw new Error('Einstellungen konnten nicht gespeichert werden. Bitte Eingaben prüfen.');
-        status.textContent = successMessage;
-        if (!('wifiSsid' in data)) await loadConfig();
+        if ('wifiSsid' in data) {
+          status.textContent = `${successMessage} Die Seite wird nach dem Neustart neu geladen.`;
+          reloadAfterRestart();
+        } else {
+          status.textContent = successMessage;
+          await loadConfig();
+        }
       } catch (error) { status.textContent = error.message; }
     }
 
@@ -677,14 +752,16 @@
     });
 
     document.querySelector('#resetSettings').addEventListener('click', () => resetDialog.showModal());
-    document.querySelector('#restartDevice').addEventListener('click', async () => {
-      if (!confirm('Gerät jetzt neu starten?')) return;
+    document.querySelector('#restartDevice').addEventListener('click', () => restartDialog.showModal());
+    restartDialog.addEventListener('close', async () => {
+      if (restartDialog.returnValue !== 'restart') return;
       const button = document.querySelector('#restartDevice');
       button.disabled = true;
       button.textContent = 'Neustart läuft…';
       try {
         const response = await fetch('/api/restart', { method: 'POST' });
         if (!response.ok) throw new Error();
+        reloadAfterRestart();
       } catch {
         button.disabled = false;
         button.textContent = 'Gerät neu starten';
@@ -699,6 +776,7 @@
         const response = await fetch('/api/reset', { method: 'POST' });
         if (!response.ok) throw new Error('Einstellungen konnten nicht vollständig zurückgesetzt werden.');
         resetStatus.textContent = 'Einstellungen gelöscht. Das Gerät startet neu.';
+        reloadAfterRestart();
       } catch (error) { resetStatus.textContent = error.message; }
     });
 
@@ -733,9 +811,10 @@
         otaInProgress = false;
         if (request.status >= 200 && request.status < 300) {
           otaDialogTitle.textContent = 'Update erfolgreich';
-          otaDialogMessage.textContent = `${title} wurde installiert. Das Gerät startet neu.`;
+          otaDialogMessage.textContent = `${title} wurde installiert. Das Gerät startet neu. Die Seite wird anschließend neu geladen.`;
           otaProgress.value = 100;
           otaProgress.setAttribute('value', '100');
+          reloadAfterRestart();
         } else {
           otaDialogTitle.textContent = 'Update fehlgeschlagen';
           otaDialogMessage.textContent = 'Das Update konnte nicht installiert werden.';
