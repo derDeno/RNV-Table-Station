@@ -26,7 +26,7 @@ bool otaUploadOk = false;
 bool filesystemOtaUploadOk = false;
 bool filesystemOtaStarted = false;
 bool apiConnected = false;
-constexpr char firmwareVersion[] = "0.1.2";
+constexpr char firmwareVersion[] = "0.1.3";
 String filesystemVersion = "Nicht verfügbar";
 String apiAccessToken;
 uint32_t apiTokenExpiresAt = 0;
@@ -46,7 +46,11 @@ uint16_t destinationScrollOffsets[3] = {};
 uint32_t lastDestinationScroll = 0;
 
 uint16_t displayColor(uint16_t color) {
-  return (config["screenInverted"] | false) ? static_cast<uint16_t>(~color) : color;
+  if (!(config["screenInverted"] | false)) return color;
+  const uint16_t brightness = (((color >> 11) & 0x1F) * 255 / 31 * 3 +
+                               ((color >> 5) & 0x3F) * 255 / 63 * 6 +
+                               (color & 0x1F) * 255 / 31) / 10;
+  return brightness < 128 ? 0xFFFF : 0x0000;
 }
 
 void setScreenBrightness(bool dimmed = false) {
