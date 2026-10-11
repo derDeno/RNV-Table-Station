@@ -26,7 +26,7 @@ bool otaUploadOk = false;
 bool filesystemOtaUploadOk = false;
 bool filesystemOtaStarted = false;
 bool apiConnected = false;
-constexpr char firmwareVersion[] = "0.1.2";
+constexpr char firmwareVersion[] = "0.1.5";
 String filesystemVersion = "Nicht verfügbar";
 String apiAccessToken;
 uint32_t apiTokenExpiresAt = 0;
@@ -46,7 +46,12 @@ uint16_t destinationScrollOffsets[3] = {};
 uint32_t lastDestinationScroll = 0;
 
 uint16_t displayColor(uint16_t color) {
-  return (config["screenInverted"] | false) ? static_cast<uint16_t>(~color) : color;
+  const uint16_t brightness = (((color >> 11) & 0x1F) * 255 / 31 * 3 +
+                               ((color >> 5) & 0x3F) * 255 / 63 * 6 +
+                               (color & 0x1F) * 255 / 31) / 10;
+  const bool dark = brightness < 128;
+  const bool white = (config["screenInverted"] | false) ? dark : !dark;
+  return white ? 0xFFFF : 0x0000;
 }
 
 void setScreenBrightness(bool dimmed = false) {
@@ -659,7 +664,25 @@ void setupRoutes() {
       return;
     }
     config.set(nextConfig);
+    if (updateWifi) {
+      server.send(200, "application/json", "{\"saved\":true}");
+      delay(500);
+      ESP.restart();
+      return;
+    }
+    if (updateDevice) {
+      WiFi.setHostname(config["hostname"]);
+      setScreenBrightness();
+      screenDimmed = false;
+      lastScreenTouch = millis();
+    }
+    showLoadingScreen();
+    setupScreenDrawn = false;
+    lastDisplayRefresh = millis() - 20000UL;
     server.send(200, "application/json", "{\"saved\":true}");
+  });
+  server.on("/api/restart", HTTP_POST, [] {
+    server.send(200, "application/json", "{\"restarting\":true}");
     delay(500);
     ESP.restart();
   });
