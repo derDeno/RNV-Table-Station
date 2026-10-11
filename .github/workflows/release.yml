@@ -1,19 +1,18 @@
 name: Release
 
 on:
-  pull_request:
+  push:
     branches: [main]
 
 permissions:
   contents: write
 
 concurrency:
-  group: firmware-release-${{ github.event.pull_request.number }}
+  group: firmware-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    if: github.event.pull_request.head.ref == 'dev'
     runs-on: ubuntu-latest
     env:
       RNV_CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
@@ -38,20 +37,19 @@ jobs:
       - name: Create or update draft release
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MAIN_SHA: ${{ github.sha }}
         run: |
           firmware_version=$(sed -nE 's/.*firmwareVersion\[\] = "([^"]+)";.*/\1/p' src/main.cpp)
           tag="v${firmware_version}"
           title="Firmware ${tag}"
-          notes="Built from PR #${PR_NUMBER} at commit ${PR_HEAD_SHA}."
+          notes="Built from main at commit ${MAIN_SHA}."
 
           if gh release view "$tag" >/dev/null 2>&1; then
             if [[ "$(gh release view "$tag" --json isDraft --jq .isDraft)" != true ]]; then
               echo "Release $tag already exists and is published; refusing to change it." >&2
               exit 1
             fi
-            gh release edit "$tag" --draft --title "$title" --notes "$notes" --target "$PR_HEAD_SHA"
+            gh release edit "$tag" --draft --title "$title" --notes "$notes" --target "$MAIN_SHA"
             gh release view "$tag" --json assets --jq '.assets[].name' |
               while IFS= read -r asset; do
                 if [[ "$asset" == filesystem-*.bin ]]; then
@@ -60,5 +58,5 @@ jobs:
               done
             gh release upload "$tag" artifacts/*.bin --clobber
           else
-            gh release create "$tag" artifacts/*.bin --draft --title "$title" --notes "$notes" --target "$PR_HEAD_SHA"
+            gh release create "$tag" artifacts/*.bin --draft --title "$title" --notes "$notes" --target "$MAIN_SHA"
           fi
