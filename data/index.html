@@ -74,7 +74,9 @@
     input, select { width: 100%; min-height: 44px; border: 1px solid #bdc9d1; border-radius: 7px; padding: 9px 11px; background: white; color: inherit; font: inherit; }
     input[readonly] { background: #f8fafb; }
     input[type="range"] { min-height: 32px; padding: 0; accent-color: var(--orange); }
-    input[type="checkbox"] { width: auto; min-height: auto; }
+    input[type="checkbox"] { width: auto; min-height: auto; accent-color: var(--orange); }
+    .invert-setting { display: flex; align-items: center; gap: 9px; }
+    .invert-setting label { margin: 0; }
     input[type="file"] { padding: 6px; }
     .help { margin: 6px 0 0; color: var(--muted); font-size: .86rem; }
     .slot-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -108,6 +110,7 @@
     dialog { width: min(440px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 14px; padding: 24px; color: inherit; box-shadow: 0 18px 60px #00254c40; }
     dialog::backdrop { background: #10283b80; }
     dialog h2 { margin-bottom: 12px; }
+    #otaProgress { width: 100%; margin: 8px 0 16px; accent-color: var(--orange); }
     .site-footer { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: auto; padding: 18px 24px 24px; color: var(--muted); font-size: .9rem; }
     .github-link { display: inline-flex; align-items: center; gap: 7px; color: var(--blue); font-weight: 400; text-decoration: none; }
     .github-link:hover { text-decoration: underline; }
@@ -210,7 +213,7 @@
           <form id="device-form" class="settings-body field-grid">
             <div><label for="hostname">Gerätename (Hostname)</label><input id="hostname" pattern="[A-Za-z0-9][A-Za-z0-9-]{0,30}[A-Za-z0-9]|[A-Za-z0-9]" maxlength="32" required></div>
             <div><label for="screenBrightness">Bildschirmhelligkeit <output id="brightnessValue" for="screenBrightness">100 %</output></label><input id="screenBrightness" type="range" min="1" max="100" value="100"></div>
-            <div><label for="screenInverted">Bildschirmfarben invertieren</label><input id="screenInverted" type="checkbox"></div>
+            <div class="invert-setting"><input id="screenInverted" type="checkbox"><label for="screenInverted">Bildschirmfarben invertieren</label></div>
             <div class="actions settings-actions"><button class="primary-button" type="submit">Geräteeinstellungen speichern und neu starten</button><p id="deviceStatus" role="status" aria-live="polite"></p></div>
           </form>
         </details>
@@ -231,9 +234,9 @@
         <div class="settings-body">
           <div class="field-grid">
             <div><label for="firmware">Firmware-Datei auswählen</label><input id="firmware" type="file" accept=".bin,application/octet-stream"></div>
-            <div class="actions" style="align-self:end"><button id="update" class="primary-button" type="button">Update installieren</button><p id="otaStatus" role="status" aria-live="polite"></p></div>
+            <div class="actions" style="align-self:end"><button id="update" class="primary-button" type="button">Update installieren</button></div>
             <div><label for="filesystem">Dateisystem-Datei auswählen</label><input id="filesystem" type="file" accept=".bin,application/octet-stream"></div>
-            <div class="actions" style="align-self:end"><button id="updateFilesystem" class="primary-button" type="button">Dateisystem installieren</button><p id="filesystemOtaStatus" role="status" aria-live="polite"></p></div>
+            <div class="actions" style="align-self:end"><button id="updateFilesystem" class="primary-button" type="button">Dateisystem installieren</button></div>
           </div>
         </div>
       </details>
@@ -268,6 +271,13 @@
     </form>
   </dialog>
 
+  <dialog id="otaDialog" aria-labelledby="otaDialogTitle" aria-describedby="otaDialogMessage">
+    <h2 id="otaDialogTitle">Update wird installiert</h2>
+    <p id="otaDialogMessage" role="status" aria-live="polite">Bitte warten und diese Seite nicht schließen.</p>
+    <progress id="otaProgress" max="100" value="0" aria-label="Update-Fortschritt"></progress>
+    <div class="actions"><button id="otaDialogClose" class="primary-button" type="button" hidden>Schließen</button></div>
+  </dialog>
+
   <dialog id="stationDialog" aria-labelledby="stationDialogTitle">
     <form method="dialog">
       <h2 id="stationDialogTitle">Haltestelle auswählen</h2>
@@ -292,8 +302,12 @@
     const wifiStatus = document.querySelector('#wifiStatus');
     const deviceStatus = document.querySelector('#deviceStatus');
     const stationsStatus = document.querySelector('#stationsStatus');
-    const otaStatus = document.querySelector('#otaStatus');
-    const filesystemOtaStatus = document.querySelector('#filesystemOtaStatus');
+    const otaDialog = document.querySelector('#otaDialog');
+    const otaDialogTitle = document.querySelector('#otaDialogTitle');
+    const otaDialogMessage = document.querySelector('#otaDialogMessage');
+    const otaProgress = document.querySelector('#otaProgress');
+    const otaDialogClose = document.querySelector('#otaDialogClose');
+    let otaInProgress = false;
     const resetStatus = document.querySelector('#resetStatus');
     const resetDialog = document.querySelector('#resetDialog');
     const stationDialog = document.querySelector('#stationDialog');
@@ -607,7 +621,7 @@
         document.querySelector('#hostname').value = config.hostname || 'rnv-table-station';
         document.querySelector('#screenBrightness').value = config.screenBrightness ?? 100;
         document.querySelector('#brightnessValue').value = `${document.querySelector('#screenBrightness').value} %`;
-        document.querySelector('#screenInverted').checked = config.screenInverted ?? true;
+        document.querySelector('#screenInverted').checked = config.screenInverted ?? false;
         document.querySelector('#defaultSlot').value = config.defaultSlot ?? 0;
         configuredSlots = ['', '', ''];
         (config.slots || []).slice(0, 3).forEach((slot, index) => {
@@ -669,29 +683,66 @@
       } catch (error) { resetStatus.textContent = error.message; }
     });
 
-    document.querySelector('#update').addEventListener('click', async () => {
-      const file = document.querySelector('#firmware').files[0];
-      if (!file) { otaStatus.textContent = 'Bitte zuerst eine Firmware-Datei auswählen.'; return; }
-      if (!confirm(`${file.name} installieren und das Gerät neu starten?`)) return;
-      otaStatus.textContent = 'Firmware wird installiert...';
-      const body = new FormData(); body.append('firmware', file);
-      try {
-        const response = await fetch('/api/ota', { method: 'POST', body });
-        if (!response.ok) throw new Error('Update fehlgeschlagen. Die bisherige Firmware bleibt aktiv.');
-        otaStatus.textContent = 'Update installiert. Das Gerät startet neu.';
-      } catch (error) { otaStatus.textContent = error.message; }
+    window.addEventListener('beforeunload', event => {
+      if (!otaInProgress) return;
+      event.preventDefault();
+      event.returnValue = '';
     });
 
-    document.querySelector('#updateFilesystem').addEventListener('click', async () => {
+    otaDialog.addEventListener('cancel', event => { if (otaInProgress) event.preventDefault(); });
+    otaDialogClose.addEventListener('click', () => otaDialog.close());
+
+    function installUpdate(file, endpoint, field, title) {
+      if (!file) return;
+      otaInProgress = true;
+      otaDialogTitle.textContent = `${title} wird installiert`;
+      otaDialogMessage.textContent = 'Bitte warten und diese Seite nicht schließen.';
+      otaProgress.value = 0;
+      otaProgress.removeAttribute('value');
+      otaDialogClose.hidden = true;
+      otaDialog.showModal();
+
+      const body = new FormData(); body.append(field, file);
+      const request = new XMLHttpRequest();
+      request.upload.addEventListener('progress', event => {
+        if (event.lengthComputable) {
+          otaProgress.value = Math.round(event.loaded / event.total * 100);
+          otaProgress.setAttribute('value', otaProgress.value);
+        }
+      });
+      request.addEventListener('load', () => {
+        otaInProgress = false;
+        if (request.status >= 200 && request.status < 300) {
+          otaDialogTitle.textContent = 'Update erfolgreich';
+          otaDialogMessage.textContent = `${title} wurde installiert. Das Gerät startet neu.`;
+          otaProgress.value = 100;
+          otaProgress.setAttribute('value', '100');
+        } else {
+          otaDialogTitle.textContent = 'Update fehlgeschlagen';
+          otaDialogMessage.textContent = 'Das Update konnte nicht installiert werden.';
+        }
+        otaDialogClose.hidden = false;
+      });
+      request.addEventListener('error', () => {
+        otaInProgress = false;
+        otaDialogTitle.textContent = 'Update fehlgeschlagen';
+        otaDialogMessage.textContent = 'Das Gerät ist nicht erreichbar oder die Verbindung wurde unterbrochen.';
+        otaDialogClose.hidden = false;
+      });
+      request.open('POST', endpoint);
+      request.send(body);
+    }
+
+    document.querySelector('#update').addEventListener('click', () => {
+      const file = document.querySelector('#firmware').files[0];
+      if (!file) { alert('Bitte zuerst eine Firmware-Datei auswählen.'); return; }
+      installUpdate(file, '/api/ota', 'firmware', 'Firmware');
+    });
+
+    document.querySelector('#updateFilesystem').addEventListener('click', () => {
       const file = document.querySelector('#filesystem').files[0];
-      if (!file) { filesystemOtaStatus.textContent = 'Bitte zuerst eine Dateisystem-Datei auswählen.'; return; }
-      filesystemOtaStatus.textContent = 'Dateisystem wird installiert...';
-      const body = new FormData(); body.append('filesystem', file);
-      try {
-        const response = await fetch('/api/ota/filesystem', { method: 'POST', body });
-        if (!response.ok) throw new Error('Dateisystem-Update fehlgeschlagen.');
-        filesystemOtaStatus.textContent = 'Dateisystem installiert. Das Gerät startet neu.';
-      } catch (error) { filesystemOtaStatus.textContent = error.message; }
+      if (!file) { alert('Bitte zuerst eine Dateisystem-Datei auswählen.'); return; }
+      installUpdate(file, '/api/ota/filesystem', 'filesystem', 'Dateisystem');
     });
 
     loadStatus();
